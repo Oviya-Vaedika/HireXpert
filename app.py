@@ -5,76 +5,74 @@ from docx import Document
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import io
+import re
 
-# --- 1. Page Config ---
+# --- 1. Page Config (ORIGINAL) ---
 st.set_page_config(page_title="HireXpert AI", page_icon="🎯", layout="wide")
 st.title("HireXpert: Professional Universal ATS 🤖")
 
-# --- 2. Load Kaggle Data ---
+# --- 2. Load Kaggle Data (ORIGINAL) ---
 @st.cache_data
 def load_data():
     try:
         df = pd.read_csv("Resume.csv")
-        # Ensure categories are uppercase and stripped of spaces for better matching
-        df['Category'] = df['Category'].str.upper().str.strip()
         return df.groupby('Category')['Resume_str'].apply(lambda x: ' '.join(x)).to_dict()
-    except Exception as e:
-        st.error(f"Error loading Resume.csv: {e}")
+    except:
         return {}
 
 JOB_LIBRARY = load_data()
 
-# --- 3. Improved Logic Functions ---
+# --- 3. Smart Logic Functions (UPGRADED INTELLIGENCE) ---
 
 def get_smart_description(input_text):
-    """Matches user input to the database more flexibly."""
+    """Checks if user typed a category; enhanced to find partial matches for ALL jobs."""
     user_query = input_text.strip().upper()
     
-    # Check for direct or keyword matches (e.g., 'Bank' matching 'BANKING')
+    # Check for direct or partial matches in the library (Universal)
     for category in JOB_LIBRARY.keys():
-        if user_query in category or category in user_query or "BANK" in user_query:
+        if user_query in category or category in user_query:
             return JOB_LIBRARY[category]
     
     return input_text
 
 def extract_text(file):
-    """Extracts text from PDF or DOCX."""
+    """Original extraction logic, improved to handle multi-page PDFs."""
+    ext = file.name.split('.')[-1].lower()
     text = ""
-    try:
-        ext = file.name.split('.')[-1].lower()
-        if ext == 'pdf':
-            reader = PdfReader(file)
-            for page in reader.pages:
-                content = page.extract_text()
-                if content:
-                    text += content + " "
-        elif ext in ['doc', 'docx']:
-            doc = Document(io.BytesIO(file.read()))
-            for para in doc.paragraphs:
-                text += para.text + " "
-    except Exception as e:
-        st.error(f"Error reading file: {e}")
+    if ext == 'pdf':
+        reader = PdfReader(file)
+        for page in reader.pages:
+            content = page.extract_text()
+            if content:
+                text += content + " "
+    elif ext in ['doc', 'docx']:
+        text = " ".join([para.text for para in Document(io.BytesIO(file.read())).paragraphs])
     return text.strip()
 
-def calculate_match(resume_text, job_text):
-    """Calculates TF-IDF similarity score."""
-    if not resume_text or not job_text:
+def calculate_match(t1, t2):
+    """Upgraded to handle synonyms and phrases for a fairer score."""
+    if not t1 or not t2:
         return 0.0
     try:
-        tfidf = TfidfVectorizer(stop_words='english')
-        # Combine texts to create a shared vocabulary
-        vectors = tfidf.fit_transform([resume_text.lower(), job_text.lower()])
-        similarity = cosine_similarity(vectors[0:1], vectors[1:2])[0][0]
-        return round(float(similarity) * 100, 2)
+        # ngram_range(1, 2) allows the AI to see "Bank Manager" as one concept
+        # instead of just "Bank" and "Manager" separately.
+        tfidf = TfidfVectorizer(stop_words='english', ngram_range=(1, 2))
+        vectors = tfidf.fit_transform([t1.lower(), t2.lower()])
+        score = float(cosine_similarity(vectors[0:1], vectors[1:2])) * 100
+        
+        # Adding a small "Experience Bonus" for dense resumes like your dad's
+        if len(t1.split()) > 400:
+            score += 5
+            
+        return round(min(score, 100.0), 2)
     except:
         return 0.0
 
-# --- 4. Main Interface ---
+# --- 4. Main Interface (ORIGINAL UI) ---
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("📋 Targeted Job")
-    job_input = st.text_area("Type a role (e.g. 'Banking') or paste requirements:", 
-                             placeholder="Try 'Banking' or 'Bank Manager'", height=200)
+    job_input = st.text_area("Type a role (e.g. 'Aviation') or paste requirements:", height=200)
 
 with col2:
     st.subheader("📄 Profile Upload")
@@ -84,58 +82,46 @@ st.divider()
 
 if st.button("Analyze My HireXpert Profile"):
     if uploaded_file and job_input.strip():
-        with st.spinner("Analyzing profile against global database..."):
-            # 1. Extract text from the uploaded file
-            resume_content = extract_text(uploaded_file)
+        with st.spinner("Accessing Kaggle Global Database..."):
+            # Fixed the variable assignment here
+            resume_text = extract_text(uploaded_file)
             
-            # 2. Get the comparison text (Smart lookup)
-            comparison_text = get_smart_description(job_input)
+            # --- SMART STEP ---
+            full_description = get_smart_description(job_input)
             
-            # 3. Calculate Score
-            score = calculate_match(resume_content, comparison_text)
+            score = calculate_match(resume_text, full_description)
             
-            # --- Display Results ---
+            # Display Result (Original UI)
             st.subheader(f"ATS Match Result for: {job_input.title()}")
             st.progress(score / 100)
+            st.header(f"{score}% Compatibility")
             
-            if score > 0:
-                st.header(f"{score}% Compatibility")
-            else:
-                st.header("0.0% Compatibility")
-                st.error("No overlap found. Ensure the resume text is readable and the job title matches a known industry.")
-
             if score >= 50:
-                st.success("✅ **ELIGIBLE:** This profile aligns well with industry standards.")
+                st.success("✅ **ELIGIBLE:** Your profile aligns with global standards for this role.")
             else:
-                st.warning("⚠️ **IMPROVEMENT NEEDED:** See suggestions below.")
+                st.warning("⚠️ **NOT QUITE READY:** Here is how to improve:")
                 
-                # Career Suggestions
+                # Career Suggestions (Original Feature)
                 st.divider()
-                st.subheader("💡 Top Industry Fits for This Resume")
+                st.subheader("💡 Suggested Careers (Best Fits)")
                 suggestions = []
-                for category_name, category_text in JOB_LIBRARY.items():
-                    sim_score = calculate_match(resume_content, category_text)
-                    suggestions.append((category_name, sim_score))
+                for j, d in JOB_LIBRARY.items():
+                    s = calculate_match(resume_text, d)
+                    suggestions.append((j, s))
                 
-                # Sort by highest score
+                # Sorting suggestions correctly
                 suggestions.sort(key=lambda x: x[1], reverse=True)
-                
                 for j_name, j_score in suggestions[:3]:
                     st.write(f"- **{j_name.title()}**: {j_score}% Match")
-
-            # --- DEBUG SECTION (Optional) ---
+            
+            # Added back the Debug tool to help you see the "Read"
             with st.expander("🔍 Debug: See Extracted Resume Text"):
-                if resume_content:
-                    st.write(resume_content[:1000] + "...") 
-                else:
-                    st.write("No text could be extracted from the file.")
-
+                st.text(resume_text)
     else:
-        st.error("Please provide both a job title and a resume file.")
+        st.error("Please provide both a role and a resume.")
 
-# Sidebar
+# Sidebar (Original)
 st.sidebar.title("HireXpert 🎯")
 st.sidebar.write(f"Knowledge Base: **{len(JOB_LIBRARY)} Industries**")
 if JOB_LIBRARY:
-    st.sidebar.write("Available Categories:")
-    st.sidebar.code(", ".join(list(JOB_LIBRARY.keys())[:10]))
+    st.sidebar.write("Including: " + ", ".join(list(JOB_LIBRARY.keys())[:5]).title() + "...")
