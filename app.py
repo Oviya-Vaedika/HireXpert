@@ -5,9 +5,10 @@ import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Set website branding
-st.set_page_config(page_title="HireXpert", page_icon="🌍")
+# 1. Page Configuration
+st.set_page_config(page_title="HireXpert", page_icon="🌍", layout="wide")
 
+# 2. Support Functions
 def extract_text(uploaded_file):
     if uploaded_file.type == "application/pdf":
         pdf_reader = PyPDF2.PdfReader(uploaded_file)
@@ -18,66 +19,80 @@ def extract_text(uploaded_file):
     return str(uploaded_file.read(), "utf-8")
 
 def get_dynamic_suggestion(resume_text):
-    """Analyzes the resume to find the closest matching global industry."""
-    # Expanded industry profiles for dynamic matching
     industry_profiles = {
-        "Data Science & AI": "python machine learning sql statistics r neural networks analytics",
-        "Healthcare & Nursing": "patient care clinical hospital medicine nursing surgery healthcare",
-        "Civil & Construction": "structural site management blueprint masonry concrete survey",
-        "Finance & Investment": "banking audit portfolio tax accounting excel financial equity",
-        "Sales & Business Development": "crm leads negotiation revenue b2b prospecting cold calling",
-        "Creative Design": "figma photoshop ui ux adobe illustrator branding creative",
-        "Customer Support": "ticketing troubleshooting communication empathy helpdesk service",
-        "Logistics & Supply Chain": "warehouse inventory procurement shipping forklift global trade",
-        "Hospitality & Culinary": "chef kitchen hotel guest service housekeeping tourism",
-        "Law & Legal Services": "litigation contract compliance paralegal judiciary ethics",
-        "Digital Marketing": "seo sem social media content strategy copywriting ads google analytics",
-        "Human Resources": "recruitment payroll employee relations onboarding talent management",
-        "Skilled Trades": "welding electrical plumbing carpentry hvac repair maintenance",
-        "Education & Teaching": "lesson plan classroom curriculum pedagogy student teaching",
-        "Project Management": "agile scrum jira stakeholder pmp scheduling budget"
+        "Data Science & AI": "python machine learning sql neural networks analytics deep learning",
+        "Healthcare & Medicine": "patient clinical medicine nursing surgery hospital healthcare",
+        "Construction & Trades": "electrical plumbing masonry carpentry maintenance structural",
+        "Finance & Banking": "audit budget tax accounting investment banking portfolio excel",
+        "Marketing & SEO": "content strategy ads search engine optimization copywriting marketing",
+        "Sales & Business": "crm leads negotiation revenue b2b prospecting cold calling",
+        "Design & UX/UI": "figma photoshop adobe illustrator branding creative prototype",
+        "Supply Chain & Logistics": "warehouse inventory shipping procurement forklift logistics",
+        "Law & Legal": "litigation contract compliance paralegal judiciary ethics",
+        "Education & Teaching": "lesson plan curriculum classroom pedagogy student teaching",
+        "Human Resources": "recruitment payroll onboarding talent management employee relations",
+        "Customer Service": "ticketing communication empathy helpdesk troubleshooting",
+        "Hospitality": "chef kitchen hotel guest service housekeeping tourism culinary",
+        "Project Management": "agile scrum jira pmp stakeholder scheduling budget",
+        "Security & IT": "cybersecurity networking cloud aws azure hardware helpdesk"
     }
-    
-    best_match = "General Professional"
-    highest_sim = 0
-    
-    # Analyze resume content against all profiles
-    for industry, profile_keywords in industry_profiles.items():
-        docs = [resume_text.lower(), profile_keywords]
-        # Uses TF-IDF to focus on the unique technical keywords
+    best_match, highest_sim = "General Professional", 0
+    for industry, keywords in industry_profiles.items():
+        docs = [resume_text.lower(), keywords]
         vec = TfidfVectorizer(stop_words='english').fit_transform(docs)
-        sim = cosine_similarity(vec[0:1], vec[1:2])[0][0]
-        
+        sim = cosine_similarity(vec[0:1], vec[1:2])
         if sim > highest_sim:
-            highest_sim = sim
-            best_match = industry
-            
+            highest_sim, best_match = sim, industry
     return best_match
 
-# --- UI Setup ---
-st.title("HireXpert 🌍")
-jd = st.text_area("Job Description:", height=100)
-uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "txt"])
+# 3. Header with Subtitle
+# Using columns to place the subtitle next to the main title
+head1, head2 = st.columns([0.3, 0.7])
+with head1:
+    st.title("HireXpert 🌍")
+with head2:
+    st.markdown("<br><h4 style='color: grey;'>Global AI Resume Screening & Optimization</h4>", unsafe_content_allowed=True)
 
+st.divider()
+
+# 4. Inputs (Larger JD Box)
+jd = st.text_area("Step 1: Paste the Job Description (JD):", 
+                  placeholder="Paste requirements for ANY job in the world here...", 
+                  height=300) # Increased height
+
+uploaded_file = st.file_uploader("Step 2: Upload Resume (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
+
+# 5. Logic
 if uploaded_file and jd:
     resume_text = extract_text(uploaded_file)
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🔍 Analyze Resume"):
+        if st.button("🔍 Analyze Resume", use_container_width=True):
+            st.subheader("Analysis Results")
             docs = [jd.lower(), resume_text.lower()]
             vec = TfidfVectorizer(stop_words='english').fit_transform(docs)
             score = round(cosine_similarity(vec[0:1], vec[1:2])[0][0] * 100, 2)
-            st.metric("Match Score", f"{score}%")
-            if score < 50:
-                suggestion = get_dynamic_suggestion(resume_text)
-                st.error(f"Low match. Based on your skills, try roles in: **{suggestion}**")
+            
+            st.metric("ATS Match Score", f"{score}%")
+            if score >= 60:
+                st.success("✅ Eligible: Your profile is a strong match.")
+            else:
+                industry = get_dynamic_suggestion(resume_text)
+                st.error(f"❌ Low Match. Suggested Field: **{industry}**")
 
     with col2:
-        if st.button("✨ Improve Resume"):
-            st.subheader("Missing Skills Found in JD:")
-            jd_words = set(re.findall(r'\b\w{4,}\b', jd.lower()))
-            res_words = set(re.findall(r'\b\w{4,}\b', resume_text.lower()))
+        if st.button("✨ Improve Resume", use_container_width=True):
+            st.subheader("Optimization Guide")
+            jd_words = set(re.findall(r'\b\w{5,}\b', jd.lower()))
+            res_words = set(re.findall(r'\b\w{5,}\b', resume_text.lower()))
             missing = list(jd_words - res_words)
-            st.write(", ".join(missing[:12]) if missing else "No missing keywords found!")
-
+            
+            st.write("#### 🛠 Keywords to Add:")
+            st.info(", ".join(missing[:15]) if missing else "No major keywords missing!")
+            
+            st.write("#### 💡 Quick Tips:")
+            st.write("- Use **bold** for key skills.\n- Include specific **metrics** (e.g., 'saved 20% time').\n- Avoid using complex **graphics**.")
+else:
+    st.info("Fill in the Job Description and upload a file to begin.")
