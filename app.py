@@ -10,13 +10,16 @@ st.set_page_config(page_title="HireXpert", page_icon="🌍", layout="wide")
 
 # 2. Support Functions
 def extract_text(uploaded_file):
-    if uploaded_file.type == "application/pdf":
-        pdf_reader = PyPDF2.PdfReader(uploaded_file)
-        return "".join([page.extract_text() or "" for page in pdf_reader.pages])
-    elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        doc = docx.Document(uploaded_file)
-        return "\n".join([para.text for para in doc.paragraphs])
-    return str(uploaded_file.read(), "utf-8")
+    try:
+        if uploaded_file.type == "application/pdf":
+            pdf_reader = PyPDF2.PdfReader(uploaded_file)
+            return "".join([page.extract_text() or "" for page in pdf_reader.pages])
+        elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            doc = docx.Document(uploaded_file)
+            return "\n".join([para.text for para in doc.paragraphs])
+        return str(uploaded_file.read(), "utf-8")
+    except Exception:
+        return ""
 
 def get_dynamic_suggestion(resume_text):
     industry_profiles = {
@@ -40,17 +43,17 @@ def get_dynamic_suggestion(resume_text):
     for industry, keywords in industry_profiles.items():
         docs = [resume_text.lower(), keywords]
         vec = TfidfVectorizer(stop_words='english').fit_transform(docs)
-        sim = cosine_similarity(vec[0:1], vec[1:2])[0][0] # Fixed extraction
+        # CRITICAL FIX: Extract float value from the numpy matrix
+        sim = float(cosine_similarity(vec[0:1], vec[1:2])[0][0])
         if sim > highest_sim:
             highest_sim, best_match = sim, industry
     return best_match
 
-# 3. Header with White Subtitle Next to Title
-# We use HTML to keep them on the same line and control colors
+# 3. Header Fix: Subtitle near Title in White
 st.markdown("""
-    <div style='display: flex; align-items: baseline;'>
-        <h1 style='margin-right: 15px;'>HireXpert 🌍</h1>
-        <h4 style='color: white; font-weight: normal; opacity: 0.8;'>Global AI Resume Screening & Optimization</h4>
+    <div style='display: flex; align-items: baseline; gap: 20px;'>
+        <h1 style='margin: 0;'>HireXpert 🌍</h1>
+        <h4 style='color: white; font-weight: normal; margin: 0; opacity: 0.9;'>Global AI Resume Screening & Optimization</h4>
     </div>
 """, unsafe_allow_html=True)
 
@@ -63,7 +66,7 @@ jd = st.text_area("Step 1: Paste the Job Description (JD):",
 
 uploaded_file = st.file_uploader("Step 2: Upload Resume (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
 
-# 5. Action Buttons & Logic
+# 5. Logic
 if uploaded_file and jd:
     resume_text = extract_text(uploaded_file)
     
@@ -74,9 +77,11 @@ if uploaded_file and jd:
             st.subheader("Analysis Results")
             docs = [jd.lower(), resume_text.lower()]
             vec = TfidfVectorizer(stop_words='english').fit_transform(docs)
-            # Fixed the numpy indexing error here
-            raw_score = cosine_similarity(vec[0:1], vec[1:2])[0][0]
-            score = round(float(raw_score) * 100, 2)
+            
+            # CRITICAL FIX: numpy.ndarray to float conversion before rounding
+            similarity_matrix = cosine_similarity(vec[0:1], vec[1:2])
+            score_value = float(similarity_matrix[0][0])
+            score = round(score_value * 100, 2)
             
             st.metric("ATS Match Score", f"{score}%")
             if score >= 60:
@@ -99,6 +104,6 @@ if uploaded_file and jd:
                 st.success("No major keywords missing!")
             
             st.write("#### 💡 Quick Tips:")
-            st.write("- Use **bold** for key skills.\n- Include **measurable results**.\n- Keep layout clean.")
+            st.write("- Use **bold** for key skills.\n- Include **measurable results**.")
 else:
-    st.info("Please paste a Job Description and upload your Resume to begin.")
+    st.info("Paste a Job Description and upload your Resume to begin.")
