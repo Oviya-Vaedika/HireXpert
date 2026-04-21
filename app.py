@@ -54,7 +54,8 @@ def get_dynamic_suggestion(resume_text):
     for industry, keywords in industry_profiles.items():
         try:
             vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([resume_cleaned, keywords])
-            sim = cosine_similarity(vec[0:1], vec[1:2])[0][0] # Fixed indexing
+            # FIXED: Added [0][0] to avoid TypeError
+            sim = float(cosine_similarity(vec[0:1], vec[1:2])[0][0])
             if sim > highest_sim:
                 highest_sim, best_match = sim, industry
         except: continue
@@ -83,12 +84,14 @@ if uploaded_file and jd:
             if st.button("🔍 Analyze Resume", use_container_width=True):
                 st.subheader("Analysis Results")
                 try:
+                    # token_pattern allows 1 and 2 letter words like 'IT'
                     vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([jd_text, resume_text])
-                    # FIXED: Added [0][0] to prevent the TypeError
+                    
+                    # FIXED: Extracting scalar value from matrix to fix the TypeError
                     raw_sim = cosine_similarity(vec[0:1], vec[1:2])[0][0]
                     score = round(float(raw_sim) * 100, 2)
                     
-                    # Prevent 0% score for short relevant titles
+                    # Prevent 0% score for short relevant titles (like 'Sales' or 'IT')
                     if any(word in resume_text for word in jd_text.split()) and score < 15:
                         score += 25.0 
 
@@ -98,37 +101,35 @@ if uploaded_file and jd:
                     if score >= 40: st.success("✅ Profile shows relevance.")
                     else: st.warning("⚠️ Low Match. Consider tailoring your resume.")
                 except Exception as e:
-                    st.error(f"Calculation Error: {e}")
+                    st.error(f"Analysis error: {e}")
 
         with col2:
             if st.button("✨ Improve Resume", use_container_width=True):
                 st.subheader("Optimization & Synonyms")
                 
                 synonym_map = {
-                    "it": ["Information Technology", "Technical Infrastructure"],
-                    "security": ["Cybersecurity", "Information Assurance"],
-                    "managed": ["Spearheaded", "Directed", "Orchestrated"],
-                    "sales": ["Business Development", "Account Management"],
-                    "nursing": ["Clinical Support", "Patient Advocacy"],
-                    "teaching": ["Pedagogy", "Instructional Leadership"],
-                    "marketing": ["Growth Hacking", "Brand Strategy"],
-                    "accounting": ["Financial Reporting", "Audit Compliance"]
+                    "it": ["Information Technology", "Systems Admin"],
+                    "security": ["Cybersecurity", "Network Protection"],
+                    "sales": ["Revenue Generation", "Business Development", "Account Management"],
+                    "managed": ["Spearheaded", "Directed", "Executed"],
+                    "helped": ["Collaborated", "Facilitated", "Supported"],
+                    "led": ["Orchestrated", "Guided", "Governed"]
                 }
                 
-                st.write("#### 📝 Recommended Synonyms for this JD:")
+                st.write("#### 📝 Recommended Industry Synonyms:")
                 found_syns = False
                 for word in jd_text.split():
                     if word in synonym_map:
-                        st.write(f"- For **'{word}'**, try: *{', '.join(synonym_map[word])}*")
+                        st.write(f"- For **'{word}'**, try using: *{', '.join(synonym_map[word])}*")
                         found_syns = True
                 
                 if not found_syns:
-                    st.info("Tip: Use high-impact verbs like 'Achieved' or 'Implemented'.")
+                    st.info("Tip: Use high-impact verbs like 'Achieved' or 'Transformed'.")
 
                 st.write("---")
                 st.write(f"#### 💡 Tip for {detected_industry}:")
-                st.info(f"Make sure your resume highlights specific tools common in {detected_industry}.")
+                st.info(f"Double-check that your skills section includes keywords found in the {detected_industry} domain.")
     else:
-        st.error("Extraction failed.")
+        st.error("Could not read the resume text.")
 else:
-    st.info("Upload your resume and enter a JD to start.")
+    st.info("Please upload a resume and paste a Job Description to begin.")
