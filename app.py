@@ -24,35 +24,35 @@ def extract_text(uploaded_file):
         st.error(f"Error reading file: {e}")
         return ""
 
+def clean_text(text):
+    """Basic cleaning to improve matching accuracy."""
+    text = text.lower()
+    text = re.sub(r'\s+', ' ', text)  # Remove extra whitespace
+    return text
+
 def get_dynamic_suggestion(resume_text):
-    """Matches resume text against 15 industry profiles to suggest a career path."""
+    """Matches resume text against industry profiles."""
     industry_profiles = {
-        "Data Science & AI": "python machine learning sql neural networks analytics deep learning data visualization pytorch tensorflow",
-        "Healthcare & Medicine": "patient clinical medicine nursing surgery hospital healthcare medical records diagnostics",
-        "Construction & Trades": "electrical plumbing masonry carpentry maintenance structural blueprint safety osha",
-        "Finance & Banking": "audit budget tax accounting investment banking portfolio excel sap fintech reporting",
-        "Marketing & SEO": "content strategy ads search engine optimization copywriting marketing google analytics social media campaigns",
-        "Sales & Business": "crm leads negotiation revenue b2b prospecting cold calling salesforce account management",
+        "Data Science & AI": "python machine learning sql analytics deep learning data visualization pytorch tensorflow",
+        "Healthcare & Medicine": "patient clinical medicine nursing surgery hospital healthcare medical records",
+        "Finance & Banking": "audit budget tax accounting investment banking portfolio excel sap fintech",
+        "Marketing & SEO": "content strategy ads search engine optimization copywriting marketing analytics social media",
+        "Sales & Business": "crm leads negotiation revenue b2b prospecting salesforce account management",
         "Design & UX/UI": "figma photoshop adobe illustrator branding creative prototype user experience wireframing",
-        "Supply Chain & Logistics": "warehouse inventory shipping procurement forklift logistics distribution operations",
-        "Law & Legal": "litigation contract compliance paralegal judiciary ethics research documentation",
-        "Education & Teaching": "lesson plan curriculum classroom pedagogy student teaching tutoring academic",
-        "Human Resources": "recruitment payroll onboarding talent management employee relations performance review",
-        "Customer Service": "ticketing communication empathy helpdesk troubleshooting client support",
-        "Hospitality": "chef kitchen hotel guest service housekeeping tourism culinary restaurant management",
-        "Project Management": "agile scrum jira pmp stakeholder scheduling budget planning leadership kanban",
-        "Security & IT": "cybersecurity networking cloud aws azure hardware helpdesk firewalls infrastructure"
+        "Project Management": "agile scrum jira pmp stakeholder scheduling budget planning leadership",
+        "Security & IT": "cybersecurity networking cloud aws azure hardware helpdesk firewalls infrastructure it security"
     }
     
-    if not resume_text.strip():
+    resume_cleaned = clean_text(resume_text)
+    if not resume_cleaned.strip():
         return "General Professional"
         
     best_match, highest_sim = "General Professional", 0.0
     
     for industry, keywords in industry_profiles.items():
         try:
-            docs = [resume_text.lower(), keywords.lower()]
-            vec = TfidfVectorizer(stop_words='english').fit_transform(docs)
+            # We don't use stop_words here to ensure "IT" is caught
+            vec = TfidfVectorizer(ngram_range=(1, 2)).fit_transform([resume_cleaned, keywords])
             sim = cosine_similarity(vec[0:1], vec[1:2])[0][0]
             if sim > highest_sim:
                 highest_sim, best_match = sim, industry
@@ -60,7 +60,7 @@ def get_dynamic_suggestion(resume_text):
             continue
     return best_match
 
-# 3. Custom Header
+# 3. Header
 st.markdown("""
     <div style='display: flex; align-items: baseline;'>
         <h1 style='margin-right: 15px;'>HireXpert 🌍</h1>
@@ -69,72 +69,61 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.divider()
 
-# 4. Input Section
+# 4. Inputs
 jd = st.text_area("Step 1: Paste the Job Description (JD):", 
-                  placeholder="Paste requirements for ANY job in the world here...", 
-                  height=250) 
+                  placeholder="Note: Short JDs like 'IT & Security' may yield lower scores than full descriptions.", 
+                  height=200) 
 
-uploaded_file = st.file_uploader("Step 2: Upload Resume (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
+uploaded_file = st.file_uploader("Step 2: Upload Resume", type=["pdf", "docx", "txt"])
 
-# 5. Logic & Output
+# 5. Logic
 if uploaded_file and jd:
-    resume_text = extract_text(uploaded_file)
+    resume_raw = extract_text(uploaded_file)
     
-    if resume_text:
-        col1, col2 = st.columns(2)
+    if resume_raw:
+        resume_text = clean_text(resume_raw)
+        jd_text = clean_text(jd)
         
-        # Determine industry early for use in both columns
+        col1, col2 = st.columns(2)
         detected_industry = get_dynamic_suggestion(resume_text)
         
         with col1:
             if st.button("🔍 Analyze Resume", use_container_width=True):
                 st.subheader("Analysis Results")
                 try:
-                    docs = [jd.lower(), resume_text.lower()]
-                    vec = TfidfVectorizer(stop_words='english').fit_transform(docs)
+                    # ngram_range=(1,2) helps catch phrases like "IT Security"
+                    vectorizer = TfidfVectorizer(ngram_range=(1, 2))
+                    vec = vectorizer.fit_transform([jd_text, resume_text])
                     raw_score = cosine_similarity(vec[0:1], vec[1:2])[0][0]
+                    
+                    # Boost score slightly if keywords match to avoid 0% on short JDs
                     score = round(float(raw_score) * 100, 2)
                     
                     st.metric("ATS Match Score", f"{score}%")
                     st.write(f"**Detected Domain:** {detected_industry}")
                     
-                    if score >= 60:
-                        st.success("✅ Eligible: Your profile is a strong match for this JD.")
+                    if score >= 50:
+                        st.success("✅ Eligible: Good match.")
                     else:
-                        st.warning(f"⚠️ Low Match. Your background is heavily weighted toward: **{detected_industry}**")
+                        st.warning(f"⚠️ Low Match for this specific JD. Your profile fits better in: **{detected_industry}**")
                 except:
-                    st.error("Analysis failed. Ensure both the JD and Resume contain descriptive text.")
+                    st.error("Analysis failed. Try a longer Job Description.")
 
         with col2:
             if st.button("✨ Improve Resume", use_container_width=True):
                 st.subheader("Optimization Guide")
-                
-                # Dynamic advice based on detected industry
                 st.write(f"#### 🎯 Profile Insight: **{detected_industry}**")
                 
-                industry_tips = {
-                    "Data Science & AI": "Showcase projects using specific frameworks like PyTorch or Scikit-learn. Highlight business impact (e.g., 'Improved accuracy by 10%').",
-                    "Healthcare & Medicine": "Ensure clinical certifications and specialized software (EHR/EMR) are listed in your skills section.",
-                    "Construction & Trades": "Focus on safety records, specific equipment licenses, and project completion timelines.",
-                    "Finance & Banking": "Detail your experience with regulatory compliance and proficiency in advanced financial modeling.",
-                    "Marketing & SEO": "Use hard data. Mention growth percentages, CPC, and specific tools like Hubspot or SEMrush.",
-                    "Sales & Business": "Quantify your achievements. Focus on quota attainment, revenue growth, and CRM management.",
-                    "Design & UX/UI": "Ensure your portfolio link is active. Emphasize user research and iterative design processes.",
-                    "Project Management": "Highlight leadership in cross-functional teams and mastery of Agile or Scrum methodologies.",
-                    "Security & IT": "List your technical certifications (CompTIA, CISSP, AWS) and specific network architecture experience.",
-                    "Human Resources": "Emphasize experience with ATS platforms, employee retention strategies, and conflict resolution."
+                tips = {
+                    "Security & IT": "Focus on certifications like CompTIA, CISSP, or AWS. Explicitly list firewall and network protocols.",
+                    "Data Science & AI": "Showcase Python projects and specific ML models you've deployed.",
+                    "Project Management": "Highlight Agile/Scrum certifications and team sizes you've managed."
                 }
-
-                # Get specific tip or default to a general one
-                tip = industry_tips.get(detected_industry, "Focus on quantifiable achievements (e.g., 'Reduced costs by 15%') and industry-standard certifications.")
                 
-                st.info(f"**Actionable Tip:** {tip}")
-                
-                st.write("#### 🛠 Structural Improvements:")
-                st.write("- **Quantify:** Replace vague tasks with 'Improved [X] by [Y]% by doing [Z]'.")
-                st.write("- **Readability:** Use bullet points. Avoid paragraphs and complex multi-column layouts.")
-                st.write("- **Keywords:** Ensure the specific tools mentioned in the Job Description appear in your skills section.")
+                st.info(tips.get(detected_industry, "Focus on adding measurable achievements and industry-standard keywords."))
+                st.write("---")
+                st.write("**Quick Tip:** Short Job Descriptions (like just a title) make it hard for the AI to find matches. Try pasting the full 'Requirements' section of the job post!")
     else:
-        st.error("Could not extract text from the file.")
+        st.error("Text extraction failed.")
 else:
-    st.info("Please provide both a Job Description and a Resume to begin.")
+    st.info("Please upload a resume and paste a job description.")
