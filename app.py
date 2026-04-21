@@ -7,7 +7,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 # Set website branding
 st.set_page_config(page_title="HireXpert", page_icon="🌍")
-st.title("HireXpert 🌍")
 st.markdown("Global AI Resume Screening & Optimization")
 
 
