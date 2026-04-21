@@ -25,7 +25,6 @@ def extract_text(uploaded_file):
 
 def clean_text(text):
     text = text.lower()
-    # Keeping '&' for titles like 'IT & Security'
     text = re.sub(r'[^a-z0-9\s&]', '', text)
     return " ".join(text.split())
 
@@ -54,9 +53,9 @@ def get_dynamic_suggestion(resume_text):
     best_match, highest_sim = "General Professional", 0.0
     for industry, keywords in industry_profiles.items():
         try:
-            # token_pattern=r"(?u)\b\w+\b" ensures 2-letter words like 'IT' are NOT ignored
             vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([resume_cleaned, keywords])
-            sim = float(cosine_similarity(vec[0:1], vec[1:2])[0][0])
+            # FIXED: Using .item() to avoid scalar conversion error
+            sim = cosine_similarity(vec[0:1], vec[1:2]).item()
             if sim > highest_sim:
                 highest_sim, best_match = sim, industry
         except: continue
@@ -67,7 +66,7 @@ st.markdown("<h1>HireXpert 🌍 <span style='font-size: 0.5em; color: gray;'>Glo
 st.divider()
 
 # 4. Inputs
-jd = st.text_area("Step 1: Paste Job Description (JD):", placeholder="e.g. IT, Sales, or full requirements...", height=150) 
+jd = st.text_area("Step 1: Paste Job Description (JD):", placeholder="e.g. Sales, IT, or full requirements...", height=150) 
 uploaded_file = st.file_uploader("Step 2: Upload Resume", type=["pdf", "docx", "txt"])
 
 # 5. Logic
@@ -85,54 +84,56 @@ if uploaded_file and jd:
             if st.button("🔍 Analyze Resume", use_container_width=True):
                 st.subheader("Analysis Results")
                 try:
-                    # token_pattern fixed here too to recognize 'IT'
+                    # token_pattern forced to recognize 2-letter words like 'IT'
                     vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([jd_text, resume_text])
-                    raw_sim = cosine_similarity(vec[0:1], vec[1:2])
-                    score = round(float(raw_sim) * 100, 2)
                     
-                    # Logic to prevent 0% for short relevant keywords
+                    # FIXED: Extracting scalar using .item() to fix the error in your image
+                    score_val = cosine_similarity(vec[0:1], vec[1:2]).item()
+                    score = round(score_val * 100, 2)
+                    
+                    # Prevent 0% for short valid keywords
                     if any(word in resume_text for word in jd_text.split()) and score < 15:
-                        score += 30.0 
+                        score += 35.0 
 
                     st.metric("ATS Match Score", f"{min(score, 100.0)}%")
                     st.write(f"**Detected Domain:** {detected_industry}")
                     
                     if score >= 40: st.success("✅ Profile shows relevance.")
-                    else: st.warning("⚠️ Match is low. Use the optimization guide on the right.")
+                    else: st.warning("⚠️ Match is low. Try adding the keywords suggested on the right.")
                 except Exception as e:
                     st.error(f"Analysis error: {e}")
 
         with col2:
             if st.button("✨ Improve Resume", use_container_width=True):
-                st.subheader("JD Optimization Guide")
+                st.subheader("Smart Keyword Suggestions")
                 
-                # --- SYNONYM ENGINE FOR JOB DESCRIPTIONS ---
-                jd_synonyms = {
-                    "it": ["Information Technology", "Technical Support", "Systems Administration"],
-                    "security": ["Cybersecurity", "Network Protection", "Information Assurance"],
-                    "sales": ["Business Development", "Account Management", "Revenue Generation"],
+                # Dynamic Synonym Dictionary - suggests based on WHAT the user typed in the JD
+                synonym_db = {
+                    "sales": ["Revenue Growth", "Business Development", "Account Management", "Lead Generation"],
+                    "it": ["Information Technology", "Technical Support", "Systems Administration", "Network Infrastructure"],
+                    "security": ["Cybersecurity", "Information Assurance", "Network Protection"],
+                    "marketing": ["Digital Strategy", "Brand Awareness", "Market Analysis"],
                     "hr": ["Human Resources", "Talent Acquisition", "People Operations"],
-                    "dev": ["Software Development", "Engineering", "Coding"],
-                    "marketing": ["Digital Strategy", "Brand Growth", "Advertising"]
+                    "management": ["Leadership", "Operations Oversight", "Strategic Planning"]
                 }
                 
-                st.write("#### 📝 Keywords to Expand in your Resume:")
-                st.write("If the JD mentions short terms, ensure your resume uses these full professional versions:")
+                st.write(f"#### 🔍 Optimizing for: '{jd.strip()}'")
+                st.write("To improve your score, add these industry-standard terms to your resume:")
                 
-                found_syns = False
+                found_match = False
                 for word in jd_text.split():
-                    if word in jd_synonyms:
-                        st.write(f"- For **'{word.upper()}'**, include: *{', '.join(jd_synonyms[word])}*")
-                        found_syns = True
+                    if word in synonym_db:
+                        for syn in synonym_db[word]:
+                            st.info(f"✔ **{syn}**")
+                        found_match = True
                 
-                if not found_syns:
-                    st.info("Tip: Always include both acronyms (like IT) and full titles (Information Technology) to satisfy all ATS filters.")
+                if not found_match:
+                    st.write("- Extract specific tools mentioned in the job post (e.g. Excel, Python, CRM).")
+                    st.write("- Use **Action Verbs** like 'Spearheaded' or 'Optimized'.")
 
                 st.write("---")
-                st.write("#### 🛠 Structural Tips:")
-                st.write(f"1. **Align with {detected_industry}:** Ensure your summary mentions your {detected_industry} experience.")
-                st.write("2. **Quantify Results:** Don't just say 'Sales', say 'Increased sales by 15%'.")
-                st.write("3. **Formatting:** Use a clean, text-based PDF format.")
+                st.write(f"#### 💡 Pro-Tip for {detected_industry}:")
+                st.write("Ensure your resume is a simple, single-column PDF for best results with AI scanners.")
     else:
         st.error("Could not read the resume text.")
 else:
