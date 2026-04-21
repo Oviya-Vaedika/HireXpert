@@ -40,18 +40,19 @@ def get_dynamic_suggestion(resume_text):
     for industry, keywords in industry_profiles.items():
         docs = [resume_text.lower(), keywords]
         vec = TfidfVectorizer(stop_words='english').fit_transform(docs)
-        sim = cosine_similarity(vec[0:1], vec[1:2])
+        sim = cosine_similarity(vec[0:1], vec[1:2])[0][0] # Fixed extraction
         if sim > highest_sim:
             highest_sim, best_match = sim, industry
     return best_match
 
-# 3. Header with Subtitle (FIXED ERROR HERE)
-head1, head2 = st.columns([0.25, 0.75])
-with head1:
-    st.title("HireXpert 🌍")
-with head2:
-    # Fixed the parameter name to 'unsafe_allow_html'
-    st.markdown("<br><h4 style='color: grey; margin-top: 10px;'>Global AI Resume Screening & Optimization</h4>", unsafe_allow_html=True)
+# 3. Header with White Subtitle Next to Title
+# We use HTML to keep them on the same line and control colors
+st.markdown("""
+    <div style='display: flex; align-items: baseline;'>
+        <h1 style='margin-right: 15px;'>HireXpert 🌍</h1>
+        <h4 style='color: white; font-weight: normal; opacity: 0.8;'>Global AI Resume Screening & Optimization</h4>
+    </div>
+""", unsafe_allow_html=True)
 
 st.divider()
 
@@ -73,7 +74,9 @@ if uploaded_file and jd:
             st.subheader("Analysis Results")
             docs = [jd.lower(), resume_text.lower()]
             vec = TfidfVectorizer(stop_words='english').fit_transform(docs)
-            score = round(cosine_similarity(vec[0:1], vec[1:2]) * 100, 2)
+            # Fixed the numpy indexing error here
+            raw_score = cosine_similarity(vec[0:1], vec[1:2])[0][0]
+            score = round(float(raw_score) * 100, 2)
             
             st.metric("ATS Match Score", f"{score}%")
             if score >= 60:
@@ -85,7 +88,6 @@ if uploaded_file and jd:
     with col2:
         if st.button("✨ Improve Resume", use_container_width=True):
             st.subheader("Optimization Guide")
-            # Extraction of keywords (longer than 4 chars)
             jd_words = set(re.findall(r'\b\w{5,}\b', jd.lower()))
             res_words = set(re.findall(r'\b\w{5,}\b', resume_text.lower()))
             missing = list(jd_words - res_words)
@@ -97,8 +99,6 @@ if uploaded_file and jd:
                 st.success("No major keywords missing!")
             
             st.write("#### 💡 Quick Tips:")
-            st.write("- Use **bold** for key skills to catch the eye.")
-            st.write("- Include **measurable results** (e.g., 'Improved efficiency by 25%').")
-            st.write("- Keep the layout clean; avoid complex columns or graphics.")
+            st.write("- Use **bold** for key skills.\n- Include **measurable results**.\n- Keep layout clean.")
 else:
-    st.info("Please paste a Job Description and upload your Resume to begin the analysis.")
+    st.info("Please paste a Job Description and upload your Resume to begin.")
