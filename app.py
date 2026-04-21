@@ -7,8 +7,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 # Set website branding
 st.set_page_config(page_title="HireXpert", page_icon="🌍")
-st.markdown("Global AI Resume Screening & Optimization")
-
 
 def extract_text(uploaded_file):
     if uploaded_file.type == "application/pdf":
@@ -82,3 +80,4 @@ if uploaded_file and jd:
             res_words = set(re.findall(r'\b\w{4,}\b', resume_text.lower()))
             missing = list(jd_words - res_words)
             st.write(", ".join(missing[:12]) if missing else "No missing keywords found!")
+
