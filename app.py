@@ -29,7 +29,6 @@ def clean_text(text):
     return " ".join(text.split())
 
 def get_dynamic_suggestion(resume_text):
-    """Restored full 15 industry profiles with improved matching patterns."""
     industry_profiles = {
         "Data Science & AI": "python machine learning sql neural networks analytics deep learning",
         "Healthcare & Medicine": "patient clinical medicine nursing surgery hospital healthcare",
@@ -54,9 +53,8 @@ def get_dynamic_suggestion(resume_text):
     best_match, highest_sim = "General Professional", 0.0
     for industry, keywords in industry_profiles.items():
         try:
-            # Allows short words like 'IT' to be counted
             vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([resume_cleaned, keywords])
-            sim = cosine_similarity(vec[0:1], vec[1:2])
+            sim = cosine_similarity(vec[0:1], vec[1:2])[0][0] # Fixed indexing
             if sim > highest_sim:
                 highest_sim, best_match = sim, industry
         except: continue
@@ -84,50 +82,52 @@ if uploaded_file and jd:
         with col1:
             if st.button("🔍 Analyze Resume", use_container_width=True):
                 st.subheader("Analysis Results")
-                # Updated vectorizer to handle all job types and short words
-                vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([jd_text, resume_text])
-                score = round(float(cosine_similarity(vec[0:1], vec[1:2])) * 100, 2)
-                
-                # Logic to prevent 0.0% for short JD titles
-                if any(word in resume_text for word in jd_text.split()) and score < 15:
-                    score = score + 25.0 
+                try:
+                    vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([jd_text, resume_text])
+                    # FIXED: Added [0][0] to prevent the TypeError
+                    raw_sim = cosine_similarity(vec[0:1], vec[1:2])[0][0]
+                    score = round(float(raw_sim) * 100, 2)
+                    
+                    # Prevent 0% score for short relevant titles
+                    if any(word in resume_text for word in jd_text.split()) and score < 15:
+                        score += 25.0 
 
-                st.metric("ATS Match Score", f"{min(score, 100.0)}%")
-                st.write(f"**Detected Domain:** {detected_industry}")
-                
-                if score >= 40: st.success("✅ Profile shows relevance.")
-                else: st.warning("⚠️ Low Match. Consider tailoring your resume to the JD.")
+                    st.metric("ATS Match Score", f"{min(score, 100.0)}%")
+                    st.write(f"**Detected Domain:** {detected_industry}")
+                    
+                    if score >= 40: st.success("✅ Profile shows relevance.")
+                    else: st.warning("⚠️ Low Match. Consider tailoring your resume.")
+                except Exception as e:
+                    st.error(f"Calculation Error: {e}")
 
         with col2:
             if st.button("✨ Improve Resume", use_container_width=True):
                 st.subheader("Optimization & Synonyms")
                 
-                # Multi-Industry Synonym Dictionary
                 synonym_map = {
                     "it": ["Information Technology", "Technical Infrastructure"],
-                    "security": ["Cybersecurity", "Network Protection"],
-                    "sales": ["Business Development", "Revenue Growth"],
+                    "security": ["Cybersecurity", "Information Assurance"],
                     "managed": ["Spearheaded", "Directed", "Orchestrated"],
-                    "nursing": ["Patient Care", "Clinical Support"],
-                    "teacher": ["Educator", "Academic Instructor"],
-                    "marketing": ["Digital Strategy", "Brand Awareness"],
-                    "cleaning": ["Sanitization", "Maintenance Operations"]
+                    "sales": ["Business Development", "Account Management"],
+                    "nursing": ["Clinical Support", "Patient Advocacy"],
+                    "teaching": ["Pedagogy", "Instructional Leadership"],
+                    "marketing": ["Growth Hacking", "Brand Strategy"],
+                    "accounting": ["Financial Reporting", "Audit Compliance"]
                 }
                 
-                st.write("#### 📝 Recommended Industry Synonyms:")
+                st.write("#### 📝 Recommended Synonyms for this JD:")
                 found_syns = False
-                words_in_jd = jd_text.split()
-                for word in words_in_jd:
+                for word in jd_text.split():
                     if word in synonym_map:
                         st.write(f"- For **'{word}'**, try: *{', '.join(synonym_map[word])}*")
                         found_syns = True
                 
                 if not found_syns:
-                    st.info("Tip: Use high-impact action verbs like 'Executed', 'Developed', or 'Transformed'.")
+                    st.info("Tip: Use high-impact verbs like 'Achieved' or 'Implemented'.")
 
                 st.write("---")
                 st.write(f"#### 💡 Tip for {detected_industry}:")
-                st.info("Make sure to include both technical skills and 'Soft Skills' like communication and leadership.")
+                st.info(f"Make sure your resume highlights specific tools common in {detected_industry}.")
     else:
         st.error("Extraction failed.")
 else:
