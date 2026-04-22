@@ -6,7 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # 1. Page Configuration
-st.set_page_config(page_title="HireXpert", page_icon="🌍", layout="wide")
+st.set_page_config(page_title="HireXpert", page_icon="🤖", layout="wide")
 
 # 2. Support Functions
 def extract_text(uploaded_file):
@@ -62,7 +62,7 @@ def get_dynamic_suggestion(resume_text):
     return best_match
 
 # 3. Header
-st.markdown("<h1>HireXpert 🌍 <span style='font-size: 0.5em; color: gray;'>Global AI Resume Screening</span></h1>", unsafe_allow_html=True)
+st.markdown("<h1>HireXpert 🤖 <span style='font-size: 0.5em; color: gray;'>Global AI Resume Screening</span></h1>", unsafe_allow_html=True)
 st.divider()
 
 # 4. Inputs
