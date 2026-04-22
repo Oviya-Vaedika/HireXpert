@@ -30,111 +30,105 @@ def clean_text(text):
 
 def get_dynamic_suggestion(resume_text):
     industry_profiles = {
-        "Data Science & AI": "python machine learning sql neural networks analytics deep learning",
-        "Healthcare & Medicine": "patient clinical medicine nursing surgery hospital healthcare",
-        "Construction & Trades": "electrical plumbing masonry carpentry maintenance structural",
-        "Finance & Banking": "audit budget tax accounting investment banking portfolio excel",
-        "Marketing & SEO": "content strategy ads search engine optimization copywriting marketing",
-        "Sales & Business": "crm leads negotiation revenue b2b prospecting cold calling",
-        "Design & UX/UI": "figma photoshop adobe illustrator branding creative prototype",
-        "Supply Chain & Logistics": "warehouse inventory shipping procurement forklift logistics",
-        "Law & Legal": "litigation contract compliance paralegal judiciary ethics",
-        "Education & Teaching": "lesson plan curriculum classroom pedagogy student teaching",
-        "Human Resources": "recruitment payroll onboarding talent management employee relations",
-        "Customer Service": "ticketing communication empathy helpdesk troubleshooting",
-        "Hospitality": "chef kitchen hotel guest service housekeeping tourism culinary",
-        "Project Management": "agile scrum jira pmp stakeholder scheduling budget",
-        "Security & IT": "cybersecurity networking cloud aws azure hardware helpdesk it information technology"
+        "Data Science & AI": "python machine learning sql neural networks analytics deep learning pytorch tensorflow",
+        "Healthcare & Medicine": "patient clinical medicine nursing surgery hospital healthcare medical",
+        "Construction & Trades": "electrical plumbing masonry carpentry maintenance structural safety osha",
+        "Finance & Banking": "audit budget tax accounting investment banking portfolio excel fintech",
+        "Marketing & SEO": "content strategy ads search engine optimization copywriting marketing analytics",
+        "Sales & Business": "crm leads negotiation revenue b2b prospecting cold calling salesforce",
+        "Design & UX/UI": "figma photoshop adobe illustrator branding creative prototype wireframing",
+        "Project Management": "agile scrum jira pmp stakeholder scheduling budget kanban",
+        "Security & IT": "cybersecurity networking cloud aws azure hardware helpdesk it infrastructure"
     }
     
     resume_cleaned = clean_text(resume_text)
-    if not resume_cleaned.strip(): return "General Professional"
+    if not resume_cleaned.strip(): return "General Professional", ""
         
-    best_match, highest_sim = "General Professional", 0.0
+    best_match, highest_sim, matching_keywords = "General Professional", 0.0, ""
     for industry, keywords in industry_profiles.items():
         try:
             vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([resume_cleaned, keywords])
-            # FIXED: Using .item() to avoid scalar conversion error
             sim = cosine_similarity(vec[0:1], vec[1:2]).item()
             if sim > highest_sim:
-                highest_sim, best_match = sim, industry
+                highest_sim, best_match, matching_keywords = sim, industry, keywords
         except: continue
-    return best_match
+    return best_match, matching_keywords
 
-# 3. Header
+# 3. Custom Header
 st.markdown("<h1>HireXpert 🤖 <span style='font-size: 0.5em; color: gray;'>Global AI Resume Screening</span></h1>", unsafe_allow_html=True)
 st.divider()
 
-# 4. Inputs
-jd = st.text_area("Step 1: Paste Job Description (JD):", placeholder="e.g. Sales, IT, or full requirements...", height=150) 
-uploaded_file = st.file_uploader("Step 2: Upload Resume", type=["pdf", "docx", "txt"])
+# 4. Input Section
+jd = st.text_area("Step 1: Paste the Job Description (JD):", placeholder="e.g. Sales, IT, or full requirements...", height=150) 
+uploaded_file = st.file_uploader("Step 2: Upload Resume (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
 
-# 5. Logic
+# 5. Logic & Output
 if uploaded_file and jd:
     resume_raw = extract_text(uploaded_file)
     
     if resume_raw:
-        resume_text = clean_text(resume_raw)
+        resume_text_clean = clean_text(resume_raw)
         jd_text = clean_text(jd)
-        detected_industry = get_dynamic_suggestion(resume_text)
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("🔍 Analyze Resume", use_container_width=True):
-                st.subheader("Analysis Results")
-                try:
-                    # token_pattern forced to recognize 2-letter words like 'IT'
-                    vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([jd_text, resume_text])
-                    
-                    # FIXED: Extracting scalar using .item() to fix the error in your image
-                    score_val = cosine_similarity(vec[0:1], vec[1:2]).item()
-                    score = round(score_val * 100, 2)
-                    
-                    # Prevent 0% for short valid keywords
-                    if any(word in resume_text for word in jd_text.split()) and score < 15:
-                        score += 35.0 
+        # VALIDATION
+        resume_indicators = ['experience', 'education', 'skills', 'projects', 'summary', 'contact']
+        is_valid = any(indicator in resume_text_clean for indicator in resume_indicators)
 
+        if not is_valid:
+            st.error("❌ The file uploaded does not seem to be a standard Resume.")
+        else:
+            detected_industry, industry_keywords = get_dynamic_suggestion(resume_text_clean)
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("🔍 Analyze Resume", use_container_width=True):
+                    st.subheader("Analysis Results")
+                    vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([jd_text, resume_text_clean])
+                    score = round(cosine_similarity(vec[0:1], vec[1:2]).item() * 100, 2)
+                    if any(word in resume_text_clean for word in jd_text.split()) and score < 15: score += 35.0 
                     st.metric("ATS Match Score", f"{min(score, 100.0)}%")
                     st.write(f"**Detected Domain:** {detected_industry}")
+
+            with col2:
+                if st.button("✨ Improve Resume", use_container_width=True):
+                    st.subheader(f"Gap Analysis for your {detected_industry} Profile")
                     
-                    if score >= 40: st.success("✅ Profile shows relevance.")
-                    else: st.warning("⚠️ Match is low. Try adding the keywords suggested on the right.")
-                except Exception as e:
-                    st.error(f"Analysis error: {e}")
+                    # --- DYNAMIC COMPONENT 1: MISSING KEYWORDS ---
+                    res_words = set(resume_text_clean.split())
+                    ind_words = set(industry_keywords.split())
+                    missing = list(ind_words - res_words)
+                    
+                    if missing:
+                        st.write("#### 🛠 Missing Industry Keywords:")
+                        st.write("Your resume is missing these core terms for your field. Adding them will boost your score:")
+                        st.info(", ".join(missing[:6]))
+                    
+                    # --- DYNAMIC COMPONENT 2: WORD REPLACEMENT ---
+                    weak_words = {
+                        "managed": "Spearheaded",
+                        "helped": "Facilitated",
+                        "led": "Orchestrated",
+                        "responsible": "Accountable",
+                        "worked": "Executed"
+                    }
+                    
+                    st.write("#### 📝 Personalized Word Swaps:")
+                    found_weak = False
+                    for weak, strong in weak_words.items():
+                        if weak in resume_text_clean:
+                            st.write(f"- You used **'{weak}'**. Replace it with: **'{strong}'**.")
+                            found_weak = True
+                    
+                    if not found_weak:
+                        st.success("Great job! Your resume already uses strong action verbs.")
 
-        with col2:
-            if st.button("✨ Improve Resume", use_container_width=True):
-                st.subheader("Smart Keyword Suggestions")
-                
-                # Dynamic Synonym Dictionary - suggests based on WHAT the user typed in the JD
-                synonym_db = {
-                    "sales": ["Revenue Growth", "Business Development", "Account Management", "Lead Generation"],
-                    "it": ["Information Technology", "Technical Support", "Systems Administration", "Network Infrastructure"],
-                    "security": ["Cybersecurity", "Information Assurance", "Network Protection"],
-                    "marketing": ["Digital Strategy", "Brand Awareness", "Market Analysis"],
-                    "hr": ["Human Resources", "Talent Acquisition", "People Operations"],
-                    "management": ["Leadership", "Operations Oversight", "Strategic Planning"]
-                }
-                
-                st.write(f"#### 🔍 Optimizing for: '{jd.strip()}'")
-                st.write("To improve your score, add these industry-standard terms to your resume:")
-                
-                found_match = False
-                for word in jd_text.split():
-                    if word in synonym_db:
-                        for syn in synonym_db[word]:
-                            st.info(f"✔ **{syn}**")
-                        found_match = True
-                
-                if not found_match:
-                    st.write("- Extract specific tools mentioned in the job post (e.g. Excel, Python, CRM).")
-                    st.write("- Use **Action Verbs** like 'Spearheaded' or 'Optimized'.")
-
-                st.write("---")
-                st.write(f"#### 💡 Pro-Tip for {detected_industry}:")
-                st.write("Ensure your resume is a simple, single-column PDF for best results with AI scanners.")
+                    # --- DYNAMIC COMPONENT 3: SPECIFIC ADVICE ---
+                    st.write("---")
+                    if "experience" in resume_text_clean and len(resume_raw) < 1500:
+                        st.warning("💡 **Suggestion:** Your resume is a bit short. Add more quantifiable achievements (e.g., numbers, % or $).")
+                    else:
+                        st.info("💡 **Suggestion:** Your resume length is good. Ensure your most recent role has at least 4-5 bullet points.")
     else:
-        st.error("Could not read the resume text.")
+        st.error("Could not extract text.")
 else:
     st.info("Upload your resume and enter a JD to start.")
