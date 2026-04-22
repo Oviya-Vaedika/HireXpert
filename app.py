@@ -25,7 +25,24 @@ def extract_text(uploaded_file):
 
 def clean_text(text):
     text = text.lower()
-    text = re.sub(r'[^a-z0-9\s&]', '', text)
+    
+    # --- NEW: Abbreviation Expansion for IT and JD terms ---
+    expansions = {
+        r'\bit\b': 'information technology',
+        r'\bjd\b': 'job description',
+        r'\bai\b': 'artificial intelligence',
+        r'\bml\b': 'machine learning',
+        r'\bqa\b': 'quality assurance',
+        r'\bui\b': 'user interface',
+        r'\bux\b': 'user experience',
+        r'\bhr\b': 'human resources',
+        r'\bsw\b': 'software',
+        r'\bhw\b': 'hardware'
+    }
+    for abbrev, full in expansions.items():
+        text = re.sub(abbrev, full, text)
+        
+    text = re.sub(r'[^a-z0-9\s&+#.]', '', text)
     return " ".join(text.split())
 
 def get_dynamic_suggestion(resume_text):
@@ -70,12 +87,13 @@ if uploaded_file and jd:
         resume_text_clean = clean_text(resume_raw)
         jd_text = clean_text(jd)
         
-        # VALIDATION
-        resume_indicators = ['experience', 'education', 'skills', 'projects', 'summary', 'contact']
-        is_valid = any(indicator in resume_text_clean for indicator in resume_indicators)
+        # --- STRICTER VALIDATION ---
+        resume_indicators = ['experience', 'education', 'skills', 'projects', 'summary', 'contact', 'employment', 'achievements']
+        found_hits = [word for word in resume_indicators if word in resume_text_clean]
+        is_valid = len(found_hits) >= 3 
 
         if not is_valid:
-            st.error("❌ The file uploaded does not seem to be a standard Resume.")
+            st.error("❌ The file uploaded does not seem to be a Resume. It is missing core sections like Experience or Education.")
         else:
             detected_industry, industry_keywords = get_dynamic_suggestion(resume_text_clean)
             col1, col2 = st.columns(2)
@@ -100,34 +118,40 @@ if uploaded_file and jd:
                     
                     if missing:
                         st.write("#### 🛠 Missing Industry Keywords:")
-                        st.write("Your resume is missing these core terms for your field. Adding them will boost your score:")
                         st.info(", ".join(missing[:6]))
                     
-                    # --- DYNAMIC COMPONENT 2: WORD REPLACEMENT ---
+                    # --- EXPANDED SYNONYMS FOR IT AND GENERAL JD ---
                     weak_words = {
                         "managed": "Spearheaded",
                         "helped": "Facilitated",
                         "led": "Orchestrated",
                         "responsible": "Accountable",
-                        "worked": "Executed"
+                        "worked": "Executed",
+                        "software developer": "Software Engineer",
+                        "it manager": "Systems Administrator / IT Director",
+                        "technical support": "Solutions Delivery Specialist",
+                        "programmer": "Application Developer",
+                        "it specialist": "Systems Support Analyst",
+                        "used": "Leveraged / Implemented",
+                        "fixed": "Troubleshot / Debugged",
+                        "setup": "Configured / Deployed"
                     }
                     
                     st.write("#### 📝 Personalized Word Swaps:")
                     found_weak = False
                     for weak, strong in weak_words.items():
-                        if weak in resume_text_clean:
-                            st.write(f"- You used **'{weak}'**. Replace it with: **'{strong}'**.")
+                        if weak in resume_text_clean or weak in jd_text:
+                            st.write(f"- Replace **'{weak}'** with stronger term: **'{strong}'**.")
                             found_weak = True
                     
                     if not found_weak:
-                        st.success("Great job! Your resume already uses strong action verbs.")
+                        st.success("Great job! Your resume already uses strong industry-specific terms.")
 
-                    # --- DYNAMIC COMPONENT 3: SPECIFIC ADVICE ---
                     st.write("---")
                     if "experience" in resume_text_clean and len(resume_raw) < 1500:
-                        st.warning("💡 **Suggestion:** Your resume is a bit short. Add more quantifiable achievements (e.g., numbers, % or $).")
+                        st.warning("💡 **Suggestion:** Your resume is a bit short. Add more quantifiable achievements.")
                     else:
-                        st.info("💡 **Suggestion:** Your resume length is good. Ensure your most recent role has at least 4-5 bullet points.")
+                        st.info("💡 **Suggestion:** Your resume length is good.")
     else:
         st.error("Could not extract text.")
 else:
