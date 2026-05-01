@@ -54,8 +54,7 @@ def get_dynamic_suggestion(resume_text):
     best_match, highest_sim, matching_keywords = "General Professional", 0.0, ""
     for industry, keywords in industry_profiles.items():
         try:
-            # Using ngram_range (1, 2) to capture phrases like "machine learning"
-            vec = TfidfVectorizer(ngram_range=(1, 2)).fit_transform([resume_cleaned, keywords])
+            vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([resume_cleaned, keywords])
             sim = cosine_similarity(vec[0:1], vec[1:2]).item()
             if sim > highest_sim:
                 highest_sim, best_match, matching_keywords = sim, industry, keywords
@@ -84,31 +83,34 @@ if uploaded_file and jd:
         else:
             detected_industry, industry_keywords = get_dynamic_suggestion(resume_text_clean)
             
-            # Placeholder for the report to prevent download button crash
-            report = f"Analysis Report for {detected_industry}\n\nJob Description: {jd[:50]}..."
+            # Prepare data for report early to avoid button crash
+            report_data = f"HireXpert Analysis Report\n\nIndustry: {detected_industry}\n"
 
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("🔍 Analyze Resume", use_container_width=True):
                     st.subheader("Analysis Results")
                     
-                    # IMPROVED TFIDF: ngram_range=(1, 2) helps catch phrases like "Information Technology"
-                    vectorizer = TfidfVectorizer(ngram_range=(1, 2))
+                    # FIXED SCORING: Using Keyword Intersection instead of strict TF-IDF math
+                    jd_words = set(jd_text.split())
+                    ind_words = set(industry_keywords.split())
+                    resume_words = set(resume_text_clean.split())
                     
-                    # Compare against JD
-                    tfidf_jd = vectorizer.fit_transform([jd_text, resume_text_clean])
-                    score_jd = cosine_similarity(tfidf_jd[0:1], tfidf_jd[1:2]).item()
+                    # Combine user JD and industry keywords for a fairer target
+                    target_keywords = jd_words.union(ind_words)
+                    found_keywords = target_keywords.intersection(resume_words)
                     
-                    # Compare against Industry Standard
-                    tfidf_ind = vectorizer.fit_transform([industry_keywords, resume_text_clean])
-                    score_ind = cosine_similarity(tfidf_ind[0:1], tfidf_ind[1:2]).item()
-                    
-                    # Weighted logic: If JD is very short, industry keywords carry more weight
-                    final_score = round(((score_jd * 0.5) + (score_ind * 0.5)) * 100, 2)
-                    
-                    st.metric("ATS Match Score", f"{min(final_score, 100.0)}%")
+                    if len(target_keywords) > 0:
+                        # Calculation: (Percentage of keywords found)
+                        calc_score = (len(found_keywords) / len(target_keywords)) * 100
+                        # Multiply by 1.5 to normalize the score for short JDs
+                        final_score = round(min(calc_score * 1.5, 100.0), 2)
+                    else:
+                        final_score = 0
+                        
+                    st.metric("ATS Match Score", f"{final_score}%")
                     st.write(f"**Detected Domain:** {detected_industry}")
-                    
+            
             with col2:
                 if st.button("✨ Improve Resume", use_container_width=True):
                     st.subheader(f"Gap Analysis")
@@ -124,10 +126,10 @@ if uploaded_file and jd:
                         if weak in resume_text_clean:
                             st.write(f"- Replace **'{weak}'** with: **'{strong}'**.")
 
-            # Correctly indented download button
+            # Indentation fixed: Download button outside of column buttons
             st.download_button(
                 "📥 Download Report",
-                report,
+                report_data,
                 file_name="hirexpert_report.txt"
             )
     else:
@@ -138,3 +140,4 @@ else:
 # ---------------- FOOTER ----------------
 st.divider()
 st.caption("Made with ❤️ by a student developer")
+
