@@ -10,7 +10,7 @@ st.set_page_config(page_title="HireXpert", page_icon="🤖", layout="wide")
 # --- SAFE API SETUP ---
 try:
     genai.configure(api_key=st.secrets["GEMINI_KEY"])
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
 except Exception as e:
     st.error(f"API Key not found or Config Error: {e}")
 
