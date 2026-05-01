@@ -8,12 +8,11 @@ import google.generativeai as genai
 st.set_page_config(page_title="HireXpert", page_icon="🤖", layout="wide")
 
 # --- SAFE API SETUP ---
-# This looks for your key in the Streamlit Cloud dashboard or a local secrets.toml file
 try:
     genai.configure(api_key=st.secrets["GEMINI_KEY"])
     model = genai.GenerativeModel('gemini-1.5-flash')
- except Exception as e:
-    st.error("API Key not found. Please set 'GEMINI_KEY' in your Streamlit Secrets.")
+except Exception as e:
+    st.error(f"API Key not found or Config Error: {e}")
 
 # 2. Support Functions
 def extract_text(uploaded_file):
