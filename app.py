@@ -31,15 +31,22 @@ def extract_text(uploaded_file):
         st.error(f"File reading error: {e}")
         return None
 
+
 # 🎯 UI
 st.title("HireXpert AI - Resume Analyzer")
-st.write("Upload your resume (PDF, DOCX, TXT)")
+st.write("Upload your resume and paste job description for better ATS analysis")
 
 uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "txt"])
 
-if st.button("Analyze Resume"):
-    if uploaded_file is not None:
+# 🧾 NEW: Job Description box
+job_description = st.text_area("Paste Job Description Here (optional)", height=200)
 
+# 🚀 Analyze Button
+if st.button("Analyze Resume"):
+
+    if uploaded_file is None:
+        st.warning("Please upload a resume first.")
+    else:
         resume_text = extract_text(uploaded_file)
 
         if not resume_text:
@@ -60,17 +67,24 @@ if st.button("Analyze Resume"):
                 if "NO" in result:
                     st.error("❌ This is not a resume.")
                 else:
-                    # ✅ Analyze
-                    analysis_prompt = f"""
-                    Analyze this resume and provide:
 
-                    1. Strengths
-                    2. Weaknesses
-                    3. ATS Score (out of 100)
-                    4. Suggestions
+                    # 🧠 ATS Analysis with Job Description
+                    analysis_prompt = f"""
+                    You are an ATS resume expert.
+
+                    Compare the resume with the job description and provide:
+
+                    1. Match Score (0-100)
+                    2. Strengths
+                    3. Weaknesses
+                    4. Missing Keywords
+                    5. Suggestions to improve ATS ranking
 
                     Resume:
                     {resume_text}
+
+                    Job Description:
+                    {job_description if job_description else "Not provided"}
                     """
 
                     response = model.generate_content(analysis_prompt)
@@ -83,7 +97,7 @@ if st.button("Analyze Resume"):
                         score = int(match.group(1))
                         score = max(0, min(score, 100))
 
-                        st.subheader("📊 ATS Score")
+                        st.subheader("📊 ATS Match Score")
                         st.progress(score / 100)
                         st.write(f"{score}/100")
 
@@ -101,9 +115,6 @@ if st.button("Analyze Resume"):
             except Exception as e:
                 st.error(f"Error: {e}")
 
-    else:
-        st.warning("Please upload a file first.")
-
-#  Footer
+# Footer
 st.markdown("---")
 st.caption("Made with ❤️ by a student developer")
