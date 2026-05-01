@@ -2,11 +2,18 @@ import streamlit as st
 import PyPDF2
 import docx
 import re
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+import google.generativeai as genai
 
-# 1. Page Configuration
+# 1. Page Configuration & AI Setup
 st.set_page_config(page_title="HireXpert", page_icon="🤖", layout="wide")
+
+# --- SAFE API SETUP ---
+# This looks for your key in the Streamlit Cloud dashboard or a local secrets.toml file
+try:
+    genai.configure(api_key=st.secrets["GEMINI_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-flash')
+except Exception as e:
+    st.error("API Key not found. Please set 'GEMINI_KEY' in your Streamlit Secrets.")
 
 # 2. Support Functions
 def extract_text(uploaded_file):
@@ -25,48 +32,33 @@ def extract_text(uploaded_file):
 
 def clean_text(text):
     text = text.lower()
-    expansions = {
-        r'\bit\b': 'information technology', r'\bjd\b': 'job description',
-        r'\bai\b': 'artificial intelligence', r'\bml\b': 'machine learning',
-        r'\bqa\b': 'quality assurance', r'\bui\b': 'user interface',
-        r'\bux\b': 'user experience', r'\bhr\b': 'human resources',
-        r'\bsw\b': 'software', r'\bhw\b': 'hardware'
-    }
-    for abbrev, full in expansions.items():
-        text = re.sub(abbrev, full, text)
-    text = re.sub(r'[^a-z0-9\s&+#.]', '', text)
+    text = re.sub(r'[^a-z0-9\s]', '', text)
     return " ".join(text.split())
 
-def get_dynamic_suggestion(resume_text):
-    industry_profiles = {
-        "Data Science & AI": "python machine learning sql neural networks analytics deep learning pytorch tensorflow",
-        "Healthcare & Medicine": "patient clinical medicine nursing surgery hospital healthcare medical",
-        "Construction & Trades": "electrical plumbing masonry carpentry maintenance structural safety osha",
-        "Finance & Banking": "audit budget tax accounting investment banking portfolio excel fintech",
-        "Marketing & SEO": "content strategy ads search engine optimization copywriting marketing analytics",
-        "Sales & Business": "crm leads negotiation revenue b2b prospecting cold calling salesforce",
-        "Design & UX/UI": "figma photoshop adobe illustrator branding creative prototype wireframing",
-        "Project Management": "agile scrum jira pmp stakeholder scheduling budget kanban",
-        "Security & IT": "cybersecurity networking cloud aws azure hardware helpdesk it infrastructure"
-    }
-    resume_cleaned = clean_text(resume_text)
-    if not resume_cleaned.strip(): return "General Professional", ""
-    best_match, highest_sim, matching_keywords = "General Professional", 0.0, ""
-    for industry, keywords in industry_profiles.items():
-        try:
-            vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([resume_cleaned, keywords])
-            sim = cosine_similarity(vec[0:1], vec[1:2]).item()
-            if sim > highest_sim:
-                highest_sim, best_match, matching_keywords = sim, industry, keywords
-        except: continue
-    return best_match, matching_keywords
+def get_ai_analysis(resume_text, jd_text):
+    prompt = f"""
+    Act as an expert HR Manager and ATS system. 
+    Analyze the following Resume against the Job Description (JD).
+    
+    1. Start with a 'Match Score: [0-100]%' at the very top.
+    2. List 'Top 5 Missing Keywords' that would improve the score.
+    3. Provide a brief 'Improvement Summary'.
+    
+    JD: {jd_text}
+    Resume: {resume_text}
+    """
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"AI Error: {e}"
 
 # 3. Custom Header
 st.markdown("<h1>HireXpert 🤖 <span style='font-size: 0.5em; color: gray;'>Global AI Resume Screening</span></h1>", unsafe_allow_html=True)
 st.divider()
 
 # 4. Input Section
-jd = st.text_area("Step 1: Paste the Job Description (JD):", placeholder="e.g. Sales, IT, or full requirements...", height=150) 
+jd = st.text_area("Step 1: Paste the Job Description (JD):", placeholder="Paste the full job requirements here...", height=150) 
 uploaded_file = st.file_uploader("Step 2: Upload Resume (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"])
 
 # 5. Logic & Output
@@ -74,70 +66,43 @@ if uploaded_file and jd:
     resume_raw = extract_text(uploaded_file)
     if resume_raw:
         resume_text_clean = clean_text(resume_raw)
-        jd_text = clean_text(jd)
-        resume_indicators = ['experience', 'education', 'skills', 'projects', 'summary', 'contact']
-        is_valid = len([word for word in resume_indicators if word in resume_text_clean]) >= 3 
-
-        if not is_valid:
-            st.error("❌ The file uploaded does not seem to be a Resume.")
-        else:
-            detected_industry, industry_keywords = get_dynamic_suggestion(resume_text_clean)
-            
-            # Prepare data for report early to avoid button crash
-            report_data = f"HireXpert Analysis Report\n\nIndustry: {detected_industry}\n"
-
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🔍 Analyze Resume", use_container_width=True):
-                    st.subheader("Analysis Results")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔍 Run AI Analysis", use_container_width=True):
+                with st.spinner("AI is evaluating your resume..."):
+                    result = get_ai_analysis(resume_text_clean, jd)
+                    st.session_state['ai_report'] = result 
                     
-                    # FIXED SCORING: Using Keyword Intersection instead of strict TF-IDF math
-                    jd_words = set(jd_text.split())
-                    ind_words = set(industry_keywords.split())
-                    resume_words = set(resume_text_clean.split())
-                    
-                    # Combine user JD and industry keywords for a fairer target
-                    target_keywords = jd_words.union(ind_words)
-                    found_keywords = target_keywords.intersection(resume_words)
-                    
-                    if len(target_keywords) > 0:
-                        # Calculation: (Percentage of keywords found)
-                        calc_score = (len(found_keywords) / len(target_keywords)) * 100
-                        # Multiply by 1.5 to normalize the score for short JDs
-                        final_score = round(min(calc_score * 1.5, 100.0), 2)
-                    else:
-                        final_score = 0
-                        
-                    st.metric("ATS Match Score", f"{final_score}%")
-                    st.write(f"**Detected Domain:** {detected_industry}")
-            
-            with col2:
-                if st.button("✨ Improve Resume", use_container_width=True):
-                    st.subheader(f"Gap Analysis")
-                    res_words = set(resume_text_clean.split())
-                    ind_words = set(industry_keywords.split())
-                    missing = list(ind_words - res_words)
-                    if missing:
-                        st.write("#### 🛠 Missing Industry Keywords:")
-                        st.info(", ".join(missing[:6]))
-                    st.write("#### 📝 Word Swaps:")
-                    weak_words = {"managed": "Spearheaded", "helped": "Facilitated", "led": "Orchestrated"}
-                    for weak, strong in weak_words.items():
-                        if weak in resume_text_clean:
-                            st.write(f"- Replace **'{weak}'** with: **'{strong}'**.")
+                    st.subheader("AI Analysis Results")
+                    st.markdown(result)
 
-            # Indentation fixed: Download button outside of column buttons
+        with col2:
+            if st.button("✨ Resume Tips", use_container_width=True):
+                st.subheader("Quick Enhancements")
+                st.write("#### 📝 Recommended Word Swaps:")
+                weak_words = {"managed": "Spearheaded", "helped": "Facilitated", "led": "Orchestrated", "worked": "Collaborated"}
+                found_any = False
+                for weak, strong in weak_words.items():
+                    if weak in resume_text_clean:
+                        st.write(f"- Replace **'{weak}'** with: **'{strong}'**")
+                        found_any = True
+                if not found_any:
+                    st.success("Your choice of action verbs looks strong!")
+
+        if 'ai_report' in st.session_state:
+            st.divider()
             st.download_button(
-                "📥 Download Report",
-                report_data,
-                file_name="hirexpert_report.txt"
+                label="📥 Download Full AI Report",
+                data=st.session_state['ai_report'],
+                file_name="hirexpert_ai_report.txt",
+                mime="text/plain"
             )
     else:
-        st.error("Could not extract text.")
+        st.error("Could not extract text from the file.")
 else:
     st.info("Upload your resume and enter a JD to start.")
 
-# ---------------- FOOTER ----------------
 st.divider()
 st.caption("Made with ❤️ by a student developer")
-
