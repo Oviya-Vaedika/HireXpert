@@ -11,8 +11,8 @@ st.set_page_config(page_title="HireXpert", page_icon="🤖", layout="wide")
 # This looks for your key in the Streamlit Cloud dashboard or a local secrets.toml file
 try:
     genai.configure(api_key=st.secrets["GEMINI_KEY"])
-    model = genai.GenerativeModel('gemini-pro')
-except Exception as e:
+    model = genai.GenerativeModel('gemini-1.5-flash')
+ except Exception as e:
     st.error("API Key not found. Please set 'GEMINI_KEY' in your Streamlit Secrets.")
 
 # 2. Support Functions
