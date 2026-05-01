@@ -104,15 +104,18 @@ if uploaded_file and jd:
                     for weak, strong in weak_words.items():
                         if weak in resume_text_clean:
                             st.write(f"- Replace **'{weak}'** with: **'{strong}'**.")
-    else:
-        st.error("Could not extract text.")
-else:
-    st.info("Upload your resume and enter a JD to start.")
+
+            # Defined a placeholder for report so the code runs
+            report = "Resume Analysis Report Content" 
             st.download_button(
                 "📥 Download Report",
                 report,
                 file_name="hirexpert_report.txt"
             )
+    else:
+        st.error("Could not extract text.")
+else:
+    st.info("Upload your resume and enter a JD to start.")
 
 # ---------------- FOOTER ----------------
 st.divider()
