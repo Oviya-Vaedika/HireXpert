@@ -82,14 +82,33 @@ if uploaded_file and jd:
             st.error("❌ The file uploaded does not seem to be a Resume.")
         else:
             detected_industry, industry_keywords = get_dynamic_suggestion(resume_text_clean)
+            
+            # FIXED: Define report variable outside buttons so download_button doesn't crash
+            report = f"Analysis for {detected_industry}\nJD: {jd[:50]}..." 
+
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("🔍 Analyze Resume", use_container_width=True):
                     st.subheader("Analysis Results")
-                    vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b").fit_transform([jd_text, resume_text_clean])
-                    score = round(cosine_similarity(vec[0:1], vec[1:2]).item() * 100, 2)
-                    st.metric("ATS Match Score", f"{min(score, 100.0)}%")
+                    
+                    # UPDATED TFIDF LOGIC: Compare Resume against BOTH JD and Industry Keywords
+                    # This prevents low scores when the user enters a very short JD.
+                    vectorizer = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
+                    
+                    # Score 1: Against the user-provided JD
+                    tfidf_jd = vectorizer.fit_transform([jd_text, resume_text_clean])
+                    score_jd = cosine_similarity(tfidf_jd[0:1], tfidf_jd[1:2]).item()
+                    
+                    # Score 2: Against industry standard keywords
+                    tfidf_ind = vectorizer.fit_transform([industry_keywords, resume_text_clean])
+                    score_ind = cosine_similarity(tfidf_ind[0:1], tfidf_ind[1:2]).item()
+                    
+                    # Blended Score: weighted toward the JD (70%) but boosted by industry match (30%)
+                    blended_score = round(((score_jd * 0.7) + (score_ind * 0.3)) * 100, 2)
+                    
+                    st.metric("ATS Match Score", f"{min(blended_score, 100.0)}%")
                     st.write(f"**Detected Domain:** {detected_industry}")
+                    
             with col2:
                 if st.button("✨ Improve Resume", use_container_width=True):
                     st.subheader(f"Gap Analysis")
@@ -104,9 +123,8 @@ if uploaded_file and jd:
                     for weak, strong in weak_words.items():
                         if weak in resume_text_clean:
                             st.write(f"- Replace **'{weak}'** with: **'{strong}'**.")
-
-            # Defined a placeholder for report so the code runs
-            report = "Resume Analysis Report Content" 
+            
+            # FIXED: Corrected indentation for the download button
             st.download_button(
                 "📥 Download Report",
                 report,
