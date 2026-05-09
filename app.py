@@ -8,7 +8,9 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 # 🔑 API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel("gemini-1.5-flash")
+
+# ✅ FIXED MODEL
+model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
 # 📄 Extract text
 def extract_text(uploaded_file):
@@ -29,19 +31,23 @@ def extract_text(uploaded_file):
         return None
 
 
-# 🎯 Basic ATS keyword checker
-def keyword_score(text):
-    keywords = [
+# 🎯 Keyword checker
+def keyword_score(text, job_desc):
+    base_keywords = [
         "python", "java", "sql", "machine learning",
         "communication", "teamwork", "project",
         "leadership", "analysis", "data"
     ]
 
     text = text.lower()
-    found = [k for k in keywords if k in text]
-    score = int((len(found) / len(keywords)) * 100)
+    job_desc = job_desc.lower() if job_desc else ""
 
-    return score, found
+    keywords = base_keywords + job_desc.split()
+
+    found = [k for k in keywords if k in text]
+    score = int((len(found) / len(set(keywords))) * 100)
+
+    return score, list(set(found))
 
 
 # 📄 Generate PDF
@@ -59,15 +65,21 @@ def create_pdf(report_text):
         return f.read()
 
 
-# UI
+# 🎯 UI
 st.set_page_config(page_title="HireXpert AI", layout="wide")
+
 st.title("HireXpert AI - Resume Analyzer 🚀")
+st.write("Upload your resume and optionally paste a job description")
 
 uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "txt"])
 
+# ✅ NEW FEATURE
+job_desc = st.text_area("📄 Paste Job Description (Optional)")
+
+# 🚀 Analyze
 if uploaded_file and st.button("Analyze Resume"):
 
-    with st.spinner("Analyzing... ⏳"):
+    with st.spinner("Analyzing your resume... ⏳"):
 
         text = extract_text(uploaded_file)
 
@@ -75,73 +87,91 @@ if uploaded_file and st.button("Analyze Resume"):
             st.error("❌ Could not read file")
         else:
             try:
-                # Check resume
+                # 🔍 Resume check
                 check = model.generate_content(
-                    f"Is this a resume? Answer YES or NO:\n{text}"
+                    f"Is this a professional resume? Answer ONLY YES or NO:\n{text}"
                 )
                 result = (check.text or "").upper()
 
                 if result.startswith("NO"):
-                    st.error("❌ Not a resume")
+                    st.error("❌ This is not a resume")
                 else:
-                    # AI analysis
+                    # 🧠 AI Analysis with Job Description
                     response = model.generate_content(
                         f"""
-                        Analyze this resume:
+                        Analyze this resume based on the job description.
 
-                        - Strengths
-                        - Weaknesses
-                        - ATS Score (out of 100)
-                        - Suggestions
+                        Job Description:
+                        {job_desc}
 
                         Resume:
                         {text}
+
+                        Provide:
+                        1. Strengths
+                        2. Weaknesses
+                        3. ATS Score (out of 100)
+                        4. Missing keywords
+                        5. Suggestions for improvement
                         """
                     )
 
                     report = response.text or ""
 
-                    # 🔍 Keyword score
-                    k_score, found = keyword_score(text)
+                    if not report:
+                        st.error("⚠️ Failed to generate analysis")
+                    else:
+                        # 📊 Extract AI score
+                        match = re.search(
+                            r'(\d{{1,3}})\s*(?:/|out of)?\s*100',
+                            report,
+                            re.IGNORECASE
+                        )
 
-                    # 📊 Extract AI score
-                    match = re.search(r'(\d{1,3})\s*(?:/|out of)?\s*100', report, re.I)
+                        ai_score = int(match.group(1)) if match else 50
 
-                    ai_score = int(match.group(1)) if match else 50
+                        # 🎯 Keyword score
+                        k_score, found = keyword_score(text, job_desc)
 
-                    # 🧠 Final score (combined)
-                    final_score = int((ai_score + k_score) / 2)
+                        # 🧠 Final score
+                        final_score = int((ai_score + k_score) / 2)
 
-                    # 📊 Display
-                    st.subheader("📊 Final ATS Score")
-                    st.progress(final_score / 100)
-                    st.write(f"{final_score}/100")
+                        # 📊 Display score
+                        st.subheader("📊 Final ATS Score")
+                        st.progress(final_score / 100)
+                        st.write(f"{final_score}/100")
 
-                    st.write("✅ Keywords Found:", ", ".join(found))
+                        if job_desc:
+                            st.subheader("🎯 Job Match Keywords")
+                            st.write(", ".join(found))
 
-                    # 📝 Report
-                    st.subheader("Analysis")
-                    st.write(report)
+                        # 📝 Report
+                        st.subheader("Analysis Result")
+                        st.write(report)
 
-                    # 📥 TXT download
-                    st.download_button(
-                        "📥 Download TXT",
-                        report,
-                        file_name="report.txt"
-                    )
+                        # 📥 TXT download
+                        st.download_button(
+                            "📥 Download TXT",
+                            report,
+                            file_name="resume_report.txt"
+                        )
 
-                    # 📄 PDF download
-                    pdf_data = create_pdf(report)
+                        # 📄 PDF download
+                        pdf_data = create_pdf(report)
 
-                    st.download_button(
-                        "📄 Download PDF",
-                        pdf_data,
-                        file_name="report.pdf"
-                    )
+                        st.download_button(
+                            "📄 Download PDF",
+                            pdf_data,
+                            file_name="resume_report.pdf"
+                        )
 
             except Exception as e:
                 st.error(f"Error: {e}")
 
-# Footer
+elif not uploaded_file:
+    st.warning("Please upload a resume first.")
+
+
+#  Footer
 st.markdown("---")
 st.caption("Made with ❤️ by a student developer")
