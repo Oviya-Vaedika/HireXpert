@@ -1,140 +1,114 @@
 import streamlit as st
-from google import genai
+import google.generativeai as genai
 import PyPDF2
 import docx
 import re
-from reportlab.platypus import SimpleDocTemplate, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-# 🔑 NEW API CLIENT
-client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+# 🔑 Load Gemini API key
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# 📄 Extract text
+# 🤖 Load model
+model = genai.GenerativeModel("gemini-1.5-flash")
+
+# 🎨 Page Config
+st.set_page_config(page_title="HireXpert", page_icon="🤖", layout="wide")
+
+st.title("🤖 HireXpert - Resume Analyzer")
+
+# 📄 Function to extract text
 def extract_text(uploaded_file):
+    text = ""
     try:
         if uploaded_file.type == "application/pdf":
             pdf_reader = PyPDF2.PdfReader(uploaded_file)
-            return "".join([p.extract_text() or "" for p in pdf_reader.pages])
+            for page in pdf_reader.pages:
+                text += page.extract_text()
 
         elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             doc = docx.Document(uploaded_file)
-            return "\n".join([p.text for p in doc.paragraphs])
+            for para in doc.paragraphs:
+                text += para.text
 
         elif uploaded_file.type == "text/plain":
-            return uploaded_file.read().decode("utf-8")
+            text = uploaded_file.read().decode("utf-8")
 
-        return None
+        else:
+            return None
+
     except:
         return None
 
-# 📄 PDF
-def create_pdf(text):
-    doc = SimpleDocTemplate("report.pdf")
-    styles = getSampleStyleSheet()
-    content = []
+    return text
 
-    for line in text.split("\n"):
-        content.append(Paragraph(line, styles["Normal"]))
 
-    doc.build(content)
+# 📊 ATS Score Function
+def calculate_score(resume, job_desc):
+    tfidf = TfidfVectorizer()
+    vectors = tfidf.fit_transform([resume, job_desc])
+    score = cosine_similarity(vectors[0:1], vectors[1:2])
+    return round(score[0][0] * 100, 2)
 
-    with open("report.pdf", "rb") as f:
-        return f.read()
 
-# 🎯 UI
-st.set_page_config(page_title="HireXpert AI", layout="wide")
+# 📥 File Upload
+resume_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "txt"])
 
-st.title("HireXpert AI - Resume Analyzer 🚀")
+# 📝 Job Description
+job_desc = st.text_area("Paste Job Description")
 
-uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "txt"])
-job_desc = st.text_area("📄 Paste Job Description (Optional)")
+# 🚀 Analyze
+if st.button("Analyze Resume"):
 
-# 🔥 Buttons
-col1, col2 = st.columns(2)
-analyze = col1.button("Analyze Resume")
-improve = col2.button("✨ Improve Resume")
+    if resume_file is None or job_desc.strip() == "":
+        st.warning("Please upload resume and enter job description")
+    else:
+        resume_text = extract_text(resume_file)
 
-if uploaded_file and (analyze or improve):
-
-    with st.spinner("Processing... ⏳"):
-
-        text = extract_text(uploaded_file)
-
-        if not text:
-            st.error("❌ Could not read file")
+        if not resume_text:
+            st.error("❌ This file is not a valid resume or unsupported format")
         else:
-            try:
-                if analyze:
-                    prompt = f"""
-                    Analyze this resume based on job description.
+            # 📊 Score
+            score = calculate_score(resume_text, job_desc)
 
-                    Job Description:
-                    {job_desc}
+            st.subheader("📊 ATS Score")
+            st.progress(int(score))
+            st.write(f"**Score: {score}%**")
 
-                    Resume:
-                    {text}
+            # 🤖 AI Feedback
+            prompt = f"""
+            Analyze this resume and give:
+            - Strengths
+            - Weaknesses
+            - Missing keywords
+            - Improvement suggestions
 
-                    Give:
-                    - Strengths
-                    - Weaknesses
-                    - ATS Score (out of 100)
-                    - Suggestions
-                    """
+            Resume:
+            {resume_text}
 
-                    response = client.models.generate_content(
-                        model="gemini-1.5-flash",
-                        contents=prompt
-                    )
+            Job Description:
+            {job_desc}
+            """
 
-                    report = response.text
+            with st.spinner("Analyzing with AI..."):
+                response = model.generate_content(prompt)
+                st.subheader("🤖 AI Feedback")
+                st.write(response.text)
 
-                    st.subheader("📊 Analysis Result")
-                    st.write(report)
+            # 📥 Download Report
+            report = f"""
+ATS Score: {score}%
 
-                    # score
-                    match = re.search(r'(\d{{1,3}})', report)
-                    if match:
-                        score = int(match.group(1))
-                        score = max(0, min(score, 100))
-                        st.progress(score / 100)
-                        st.write(f"{score}/100")
+AI Feedback:
+{response.text}
+"""
 
-                    st.download_button("📥 Download TXT", report, "analysis.txt")
+            st.download_button(
+                "📥 Download Report",
+                report,
+                file_name="resume_analysis.txt"
+            )
 
-                    pdf = create_pdf(report)
-                    st.download_button("📄 Download PDF", pdf, "analysis.pdf")
-
-                elif improve:
-                    prompt = f"""
-                    Rewrite and improve this resume professionally.
-
-                    Job Description:
-                    {job_desc}
-
-                    Resume:
-                    {text}
-
-                    Make it ATS optimized and well structured.
-                    """
-
-                    response = client.models.generate_content(
-                        model="gemini-1.5-flash",
-                        contents=prompt
-                    )
-
-                    improved = response.text
-
-                    st.subheader("✨ Improved Resume")
-                    st.write(improved)
-
-                    st.download_button("📥 Download Improved Resume", improved, "improved_resume.txt")
-
-            except Exception as e:
-                st.error(f"Error: {e}")
-
-elif not uploaded_file:
-    st.warning("Upload a resume first")
-
-# Footer
+#  Footer
 st.markdown("---")
-st.caption("Made with ❤️ by a student developer")
+st.markdown("Made with ❤️ by a student")
