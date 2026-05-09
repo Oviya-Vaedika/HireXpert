@@ -3,14 +3,14 @@ import google.generativeai as genai
 import PyPDF2
 import docx
 import re
+from reportlab.platypus import SimpleDocTemplate, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
 
-# 🔑 Load Gemini API key
+# 🔑 API
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-
-# 🤖 Load model
 model = genai.GenerativeModel("gemini-1.5-flash")
 
-# 📄 Function to extract text
+# 📄 Extract text
 def extract_text(uploaded_file):
     try:
         if uploaded_file.type == "application/pdf":
@@ -19,97 +19,124 @@ def extract_text(uploaded_file):
 
         elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             doc = docx.Document(uploaded_file)
-            return "\n".join([para.text for para in doc.paragraphs])
+            return "\n".join([p.text for p in doc.paragraphs])
 
         elif uploaded_file.type == "text/plain":
             return uploaded_file.read().decode("utf-8")
 
-        else:
-            return None
-
-    except Exception as e:
-        st.error(f"File reading error: {e}")
+        return None
+    except:
         return None
 
 
-# 🎯 UI
-st.title("HireXpert AI - Resume Analyzer")
-st.write("Upload your resume and paste job description for better ATS analysis")
+# 🎯 Basic ATS keyword checker
+def keyword_score(text):
+    keywords = [
+        "python", "java", "sql", "machine learning",
+        "communication", "teamwork", "project",
+        "leadership", "analysis", "data"
+    ]
+
+    text = text.lower()
+    found = [k for k in keywords if k in text]
+    score = int((len(found) / len(keywords)) * 100)
+
+    return score, found
+
+
+# 📄 Generate PDF
+def create_pdf(report_text):
+    doc = SimpleDocTemplate("report.pdf")
+    styles = getSampleStyleSheet()
+    content = []
+
+    for line in report_text.split("\n"):
+        content.append(Paragraph(line, styles["Normal"]))
+
+    doc.build(content)
+
+    with open("report.pdf", "rb") as f:
+        return f.read()
+
+
+# UI
+st.set_page_config(page_title="HireXpert AI", layout="wide")
+st.title("HireXpert AI - Resume Analyzer 🚀")
 
 uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "txt"])
 
-# 🧾 NEW: Job Description box
-job_description = st.text_area("Paste Job Description Here (optional)", height=200)
+if uploaded_file and st.button("Analyze Resume"):
 
-# 🚀 Analyze Button
-if st.button("Analyze Resume"):
+    with st.spinner("Analyzing... ⏳"):
 
-    if uploaded_file is None:
-        st.warning("Please upload a resume first.")
-    else:
-        resume_text = extract_text(uploaded_file)
+        text = extract_text(uploaded_file)
 
-        if not resume_text:
-            st.error("❌ Unsupported or unreadable file.")
+        if not text:
+            st.error("❌ Could not read file")
         else:
             try:
-                # 🧠 Check if resume
-                check_prompt = f"""
-                Is the following text a professional resume?
-                Answer ONLY YES or NO.
+                # Check resume
+                check = model.generate_content(
+                    f"Is this a resume? Answer YES or NO:\n{text}"
+                )
+                result = (check.text or "").upper()
 
-                Text:
-                {resume_text}
-                """
-                check_response = model.generate_content(check_prompt)
-                result = check_response.text.strip().upper()
-
-                if "NO" in result:
-                    st.error("❌ This is not a resume.")
+                if result.startswith("NO"):
+                    st.error("❌ Not a resume")
                 else:
+                    # AI analysis
+                    response = model.generate_content(
+                        f"""
+                        Analyze this resume:
 
-                    # 🧠 ATS Analysis with Job Description
-                    analysis_prompt = f"""
-                    You are an ATS resume expert.
+                        - Strengths
+                        - Weaknesses
+                        - ATS Score (out of 100)
+                        - Suggestions
 
-                    Compare the resume with the job description and provide:
+                        Resume:
+                        {text}
+                        """
+                    )
 
-                    1. Match Score (0-100)
-                    2. Strengths
-                    3. Weaknesses
-                    4. Missing Keywords
-                    5. Suggestions to improve ATS ranking
+                    report = response.text or ""
 
-                    Resume:
-                    {resume_text}
+                    # 🔍 Keyword score
+                    k_score, found = keyword_score(text)
 
-                    Job Description:
-                    {job_description if job_description else "Not provided"}
-                    """
+                    # 📊 Extract AI score
+                    match = re.search(r'(\d{1,3})\s*(?:/|out of)?\s*100', report, re.I)
 
-                    response = model.generate_content(analysis_prompt)
-                    report = response.text
+                    ai_score = int(match.group(1)) if match else 50
 
-                    # 📊 Extract score
-                    match = re.search(r'(\d{1,3})\s*/?\s*100', report)
+                    # 🧠 Final score (combined)
+                    final_score = int((ai_score + k_score) / 2)
 
-                    if match:
-                        score = int(match.group(1))
-                        score = max(0, min(score, 100))
+                    # 📊 Display
+                    st.subheader("📊 Final ATS Score")
+                    st.progress(final_score / 100)
+                    st.write(f"{final_score}/100")
 
-                        st.subheader("📊 ATS Match Score")
-                        st.progress(score / 100)
-                        st.write(f"{score}/100")
+                    st.write("✅ Keywords Found:", ", ".join(found))
 
-                    # 📝 Result
-                    st.subheader("Analysis Result")
+                    # 📝 Report
+                    st.subheader("Analysis")
                     st.write(report)
 
-                    # 📥 Download
+                    # 📥 TXT download
                     st.download_button(
-                        "📥 Download Report",
-                        data=report,
-                        file_name="resume_analysis.txt"
+                        "📥 Download TXT",
+                        report,
+                        file_name="report.txt"
+                    )
+
+                    # 📄 PDF download
+                    pdf_data = create_pdf(report)
+
+                    st.download_button(
+                        "📄 Download PDF",
+                        pdf_data,
+                        file_name="report.pdf"
                     )
 
             except Exception as e:
