@@ -1,16 +1,13 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 import PyPDF2
 import docx
 import re
 from reportlab.platypus import SimpleDocTemplate, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 
-# 🔑 API
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-
-# ✅ WORKING MODEL
-model = genai.GenerativeModel("gemini-1.0-pro")
+# 🔑 NEW API CLIENT
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 # 📄 Extract text
 def extract_text(uploaded_file):
@@ -44,18 +41,16 @@ def create_pdf(text):
     with open("report.pdf", "rb") as f:
         return f.read()
 
-# UI
+# 🎯 UI
 st.set_page_config(page_title="HireXpert AI", layout="wide")
 
 st.title("HireXpert AI - Resume Analyzer 🚀")
 
 uploaded_file = st.file_uploader("Upload Resume", type=["pdf", "docx", "txt"])
-
 job_desc = st.text_area("📄 Paste Job Description (Optional)")
 
-# 🔥 BUTTONS SIDE BY SIDE
+# 🔥 Buttons
 col1, col2 = st.columns(2)
-
 analyze = col1.button("Analyze Resume")
 improve = col2.button("✨ Improve Resume")
 
@@ -86,13 +81,17 @@ if uploaded_file and (analyze or improve):
                     - Suggestions
                     """
 
-                    response = model.generate_content(prompt)
-                    report = response.text or ""
+                    response = client.models.generate_content(
+                        model="gemini-1.5-flash",
+                        contents=prompt
+                    )
+
+                    report = response.text
 
                     st.subheader("📊 Analysis Result")
                     st.write(report)
 
-                    # 📊 Score
+                    # score
                     match = re.search(r'(\d{{1,3}})', report)
                     if match:
                         score = int(match.group(1))
@@ -100,7 +99,6 @@ if uploaded_file and (analyze or improve):
                         st.progress(score / 100)
                         st.write(f"{score}/100")
 
-                    # 📥 Download
                     st.download_button("📥 Download TXT", report, "analysis.txt")
 
                     pdf = create_pdf(report)
@@ -108,7 +106,7 @@ if uploaded_file and (analyze or improve):
 
                 elif improve:
                     prompt = f"""
-                    Improve and rewrite this resume professionally.
+                    Rewrite and improve this resume professionally.
 
                     Job Description:
                     {job_desc}
@@ -116,14 +114,15 @@ if uploaded_file and (analyze or improve):
                     Resume:
                     {text}
 
-                    Make it:
-                    - ATS optimized
-                    - Professional
-                    - Well formatted
+                    Make it ATS optimized and well structured.
                     """
 
-                    response = model.generate_content(prompt)
-                    improved = response.text or ""
+                    response = client.models.generate_content(
+                        model="gemini-1.5-flash",
+                        contents=prompt
+                    )
+
+                    improved = response.text
 
                     st.subheader("✨ Improved Resume")
                     st.write(improved)
