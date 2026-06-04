@@ -10,7 +10,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # 🤖 Load model
-# Change this line in your code:
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 # 🎨 Page Config
@@ -47,12 +46,24 @@ def extract_text(uploaded_file):
     return text
 
 
-# 📊 ATS Score Function
+# 📊 Updated ATS Score Function to handle short inputs accurately
 def calculate_score(resume, job_desc):
-    tfidf = TfidfVectorizer()
-    vectors = tfidf.fit_transform([resume, job_desc])
-    score = cosine_similarity(vectors[0:1], vectors[1:2])
-    return round(score[0][0] * 100, 2)
+    # Convert text to lowercase sets of unique alphanumeric words
+    resume_words = set(re.findall(r'\b\w+\b', resume.lower()))
+    jd_words = set(re.findall(r'\b\w+\b', job_desc.lower()))
+    
+    # Filter out common filler words (stopwords)
+    stop_words = {'and', 'the', 'is', 'in', 'at', 'of', 'for', 'with', 'a', 'to', 'an', 'on', 'or', 'by', 'be', 'from'}
+    jd_keywords = jd_words - stop_words
+    
+    if not jd_keywords:
+        return 0.0
+        
+    # Calculate how many critical JD keywords exist in the resume
+    matching_words = jd_keywords.intersection(resume_words)
+    score = (len(matching_words) / len(jd_keywords)) * 100
+    
+    return round(score, 2)
 
 
 # 📥 File Upload
