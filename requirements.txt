@@ -1,5 +1,5 @@
 streamlit
 google-generativeai
-PyPDF2
+pypdf
 python-docx
-reportlab
+scikit-learn==1.5.0
