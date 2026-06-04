@@ -1,6 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
-import PyPDF2
+import pypdf # Updated from PyPDF2 to prevent extraction crashes
 import docx
 import re
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -22,9 +22,11 @@ def extract_text(uploaded_file):
     text = ""
     try:
         if uploaded_file.type == "application/pdf":
-            pdf_reader = PyPDF2.PdfReader(uploaded_file)
+            pdf_reader = pypdf.PdfReader(uploaded_file)
             for page in pdf_reader.pages:
-                text += page.extract_text()
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted + "\n"
 
         elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             doc = docx.Document(uploaded_file)
@@ -32,6 +34,7 @@ def extract_text(uploaded_file):
                 text += para.text
 
         elif uploaded_file.type == "text/plain":
+            uploaded_file.seek(0) # Reset buffer pointer to allow re-reading
             text = uploaded_file.read().decode("utf-8")
 
         else:
@@ -72,7 +75,12 @@ if st.button("Analyze Resume"):
             score = calculate_score(resume_text, job_desc)
 
             st.subheader("📊 ATS Score")
-            st.progress(int(score))
+            # Safe progress bar rendering to handle 0% scores smoothly
+            if int(score) > 0:
+                st.progress(int(score))
+            else:
+                st.progress(0)
+                
             st.write(f"**Score: {score}%**")
 
             # 🤖 AI Feedback
