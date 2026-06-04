@@ -10,7 +10,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # 🤖 Load model
-model = genai.GenerativeModel("gemini-1.5-flash")
+# Change this line in your code:
+model = genai.GenerativeModel("gemini-2.5-flash")
 
 # 🎨 Page Config
 st.set_page_config(page_title="HireXpert", page_icon="🤖", layout="wide")
