@@ -1,10 +1,8 @@
 import streamlit as st
 import google.generativeai as genai
-import pypdf # Updated from PyPDF2 to prevent extraction crashes
+import pypdf 
 import docx
 import re
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
 # 🔑 Load Gemini API key
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -17,7 +15,7 @@ st.set_page_config(page_title="HireXpert", page_icon="🤖", layout="wide")
 
 st.title("🤖 HireXpert - Resume Analyzer")
 
-# 📄 Function to extract text
+# 📄 Function to extract text cleanly
 def extract_text(uploaded_file):
     text = ""
     try:
@@ -30,30 +28,35 @@ def extract_text(uploaded_file):
 
         elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             doc = docx.Document(uploaded_file)
-            for para in doc.paragraphs:
-                text += para.text
+            # Added a space separation to keep words from sticking together
+            text = "\n".join([para.text for para in doc.paragraphs if para.text])
 
         elif uploaded_file.type == "text/plain":
-            uploaded_file.seek(0) # Reset buffer pointer to allow re-reading
+            uploaded_file.seek(0) 
             text = uploaded_file.read().decode("utf-8")
 
         else:
             return None
 
-    except:
+    except Exception as e:
+        # Logs the actual error to your Streamlit terminal for debugging
+        print(f"Extraction error: {e}") 
         return None
 
-    return text
+    return text.strip()
 
 
-# 📊 Updated ATS Score Function to handle short inputs accurately
+# 📊 Fixed ATS Score Function
 def calculate_score(resume, job_desc):
+    if not resume or not job_desc:
+        return 0.0
+        
     # Convert text to lowercase sets of unique alphanumeric words
     resume_words = set(re.findall(r'\b\w+\b', resume.lower()))
     jd_words = set(re.findall(r'\b\w+\b', job_desc.lower()))
     
     # Filter out common filler words (stopwords)
-    stop_words = {'and', 'the', 'is', 'in', 'at', 'of', 'for', 'with', 'a', 'to', 'an', 'on', 'or', 'by', 'be', 'from'}
+    stop_words = {'and', 'the', 'is', 'in', 'at', 'of', 'for', 'with', 'a', 'to', 'an', 'on', 'or', 'by', 'be', 'from', 'i', 'am', 'are'}
     jd_keywords = jd_words - stop_words
     
     if not jd_keywords:
@@ -80,54 +83,53 @@ if st.button("Analyze Resume"):
     else:
         resume_text = extract_text(resume_file)
 
+        # CRITICAL FIX: Use 'st.stop()' to halt execution if text extraction fails
         if not resume_text:
-            st.error("❌ This file is not a valid resume or unsupported format")
-        else:
-            # 📊 Score
-            score = calculate_score(resume_text, job_desc)
+            st.error("❌ This file is empty, corrupted, or in an unsupported format.")
+            st.stop() 
+            
+        # 📊 Score
+        score = calculate_score(resume_text, job_desc)
 
-            st.subheader("📊 ATS Score")
-            # Safe progress bar rendering to handle 0% scores smoothly
-            if int(score) > 0:
-                st.progress(int(score))
-            else:
-                st.progress(0)
-                
-            st.write(f"**Score: {score}%**")
+        st.subheader("📊 ATS Score")
+        # Ensure the progress bar receives a valid float between 0.0 and 1.0
+        st.progress(score / 100.0)
+            
+        st.write(f"**Score: {score}%**")
 
-            # 🤖 AI Feedback
-            prompt = f"""
-            Analyze this resume and give:
-            - Strengths
-            - Weaknesses
-            - Missing keywords
-            - Improvement suggestions
+        # 🤖 AI Feedback
+        prompt = f"""
+        Analyze this resume and give:
+        - Strengths
+        - Weaknesses
+        - Missing keywords
+        - Improvement suggestions
 
-            Resume:
-            {resume_text}
+        Resume:
+        {resume_text}
 
-            Job Description:
-            {job_desc}
-            """
+        Job Description:
+        {job_desc}
+        """
 
-            with st.spinner("Analyzing with AI..."):
-                response = model.generate_content(prompt)
-                st.subheader("🤖 AI Feedback")
-                st.write(response.text)
+        with st.spinner("Analyzing with AI..."):
+            response = model.generate_content(prompt)
+            st.subheader("🤖 AI Feedback")
+            st.write(response.text)
 
-            # 📥 Download Report
-            report = f"""
+        # 📥 Download Report
+        report = f"""
 ATS Score: {score}%
 
 AI Feedback:
 {response.text}
 """
 
-            st.download_button(
-                "📥 Download Report",
-                report,
-                file_name="resume_analysis.txt"
-            )
+        st.download_button(
+            "📥 Download Report",
+            report,
+            file_name="resume_analysis.txt"
+        )
 
 #  Footer
 st.markdown("---")
