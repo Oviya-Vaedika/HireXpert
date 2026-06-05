@@ -50,44 +50,38 @@ def extract_text(uploaded_file):
         return None
     return text.strip()
 
-# Advanced ATS Semantic Vector Distance Matching
+# 📊 SMART ATS SCORING: Falls back to AI evaluation if the JD is too short
 def calculate_score(resume, job_desc):
     if not resume.strip() or not job_desc.strip():
         return 0.0
+        
+    # If the user only typed a short title/role instead of a full JD
+    if len(job_desc.split()) < 10:
+        try:
+            score_prompt = f"""
+            You are an ATS (Applicant Tracking System) algorithm. Compare this resume against the target role title.
+            Target Role: {job_desc}
+            Resume Content: {resume}
+            
+            Based on the candidate's skills, industry background, and job titles, calculate an alignment score from 0 to 100.
+            Output ONLY a single number representing the percentage (e.g., 78.5). Do not write any letters, words, or symbols.
+            """
+            ai_score_response = model.generate_content(score_prompt).text.strip()
+            # Clean any accidental text the AI might have outputted to extract the float value
+            cleaned_score = re.findall(r"\d+\.\d+|\d+", ai_score_response)
+            if cleaned_score:
+                return round(float(cleaned_score[0]), 2)
+        except:
+            pass # Fall back to traditional matching if API fails
+
+    # Traditional detailed matching for long, text-heavy JDs
     try:
         vectorizer = TfidfVectorizer(token_pattern=r'\b\w+\b')
         tfidf_matrix = vectorizer.fit_transform([resume, job_desc])
         similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])
-        return round(similarity * 100, 2)
+        return round(similarity[0][0] * 100, 2)
     except:
         return 0.0
-
-# Dynamic Resume Generator Engine (.docx builder)
-def generate_docx(p_info, jobs_list, edu_list):
-    doc = docx.Document()
-    doc.add_heading(p_info['name'] if p_info['name'] else "Resume", level=0)
-    doc.add_paragraph(f"Email: {p_info['email']} | Phone: {p_info['phone']} | LinkedIn: {p_info['linkedin']}")
-    
-    doc.add_heading("Experience", level=1)
-    for job in jobs_list:
-        p_exp = doc.add_paragraph()
-        p_exp.add_run(f"{job['title']} \n").bold = True
-        p_exp.add_run(f"{job['company']} ({job['duration']}) — {job['years']} Years Exp\n").italic = True
-        p_exp.add_run(job['bullets'])
-    
-    doc.add_heading("Education", level=1)
-    for edu in edu_list:
-        p_edu = doc.add_paragraph()
-        p_edu.add_run(f"{edu['degree']}\n").bold = True
-        p_edu.add_run(f"{edu['college']} (Class of {edu['year']})")
-    
-    doc.add_heading("Skills", level=1)
-    doc.add_paragraph(p_info['skills'])
-    
-    bio = BytesIO()
-    doc.save(bio)
-    bio.seek(0)
-    return bio
 
 # SCREEN 1: INTERACTIVE LANDING MENU
 if st.session_state.page == "home":
