@@ -17,13 +17,15 @@ model = genai.GenerativeModel("gemini-2.5-flash")
 # App Page Layout Setup
 st.set_page_config(page_title="HireXpert", page_icon="🤖", layout="wide")
 
-# Initialize Session States to keep track of navigation and inputs
+# Initialize Session States to keep track of navigation and inputs safely
 if "page" not in st.session_state:
     st.session_state.page = "home"
 if "jobs" not in st.session_state:
     st.session_state.jobs = []
 if "education" not in st.session_state:
     st.session_state.education = []
+if "personal_info" not in st.session_state:
+    st.session_state.personal_info = {"name": "", "email": "", "phone": "", "linkedin": "", "skills": ""}
 
 # Extraction Helper Function for Analyzer Page
 def extract_text(uploaded_file):
@@ -61,10 +63,10 @@ def calculate_score(resume, job_desc):
         return 0.0
 
 # Dynamic Resume Generator Engine (.docx builder)
-def generate_docx(full_name, email, phone, linkedin, skills, jobs_list, edu_list):
+def generate_docx(p_info, jobs_list, edu_list):
     doc = docx.Document()
-    doc.add_heading(full_name if full_name else "Resume", level=0)
-    doc.add_paragraph(f"Email: {email} | Phone: {phone} | LinkedIn: {linkedin}")
+    doc.add_heading(p_info['name'] if p_info['name'] else "Resume", level=0)
+    doc.add_paragraph(f"Email: {p_info['email']} | Phone: {p_info['phone']} | LinkedIn: {p_info['linkedin']}")
     
     doc.add_heading("Experience", level=1)
     for job in jobs_list:
@@ -80,7 +82,7 @@ def generate_docx(full_name, email, phone, linkedin, skills, jobs_list, edu_list
         p_edu.add_run(f"{edu['college']} (Class of {edu['year']})")
     
     doc.add_heading("Skills", level=1)
-    doc.add_paragraph(skills)
+    doc.add_paragraph(p_info['skills'])
     
     bio = BytesIO()
     doc.save(bio)
@@ -148,66 +150,102 @@ elif st.session_state.page == "builder":
         st.rerun()
         
     st.title("📄 Multi-History AI Resume Builder")
-    st.write("Generate custom roles dynamically (e.g., Teaching background, TVS corporate records, etc.).")
+    st.write("Fill each section and press its specific save button when done.")
     
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("👤 Personal Information")
-        full_name = st.text_input("Full Name", placeholder="Jane Doe")
-        email = st.text_input("Email Address", placeholder="janedoe@email.com")
-        phone = st.text_input("Phone Number", placeholder="+91 98765 43210")
-        linkedin = st.text_input("LinkedIn Profile URL")
-        skills = st.text_area("Skills (Comma-separated lines)", placeholder="Curriculum Mapping, Strategic Planning, Core Python")
+        # FORM 1: PERSONAL DETAILS SECTION
+        st.subheader("👤 Section 1: Personal Information")
+        with st.form("personal_form", clear_on_submit=False):
+            f_name = st.text_input("Full Name", value=st.session_state.personal_info["name"], placeholder="Jane Doe")
+            e_mail = st.text_input("Email Address", value=st.session_state.personal_info["email"], placeholder="janedoe@email.com")
+            p_hone = st.text_input("Phone Number", value=st.session_state.personal_info["phone"], placeholder="+91 98765 43210")
+            l_inkedin = st.text_input("LinkedIn Profile URL", value=st.session_state.personal_info["linkedin"])
+            s_kills = st.text_area("Skills (Comma-separated)", value=st.session_state.personal_info["skills"], placeholder="Curriculum Mapping, Operations management")
+            
+            if st.form_submit_button("💾 Save Personal Info & Skills"):
+                st.session_state.personal_info = {
+                    "name": f_name, "email": e_mail, "phone": p_hone, "linkedin": l_inkedin, "skills": s_kills
+                }
+                st.success("Personal information lock-saved!")
 
-        st.subheader("🎓 Education Qualifications")
+        st.markdown("---")
+
+        # FORM 2: EDUCATION SECTION WITH SPELLING CORRECTION
+        st.subheader("🎓 Section 2: Education Qualifications")
         with st.form("edu_form", clear_on_submit=True):
             deg = st.text_input("Degree / Qualification Title", placeholder="B.Ed Education or M.Sc Chemistry")
-            inst = st.text_input("Institution / University Name")
+            inst = st.text_input("Institution / University Name", placeholder="Madras University")
             yr = st.text_input("Graduation Class Year", placeholder="1998")
-            if st.form_submit_button("➕ Append Education Entry"):
+            
+            if st.form_submit_button("➕ Save & Spell-Check Education Block"):
                 if deg and inst:
+                    with st.spinner("AI checking spelling of degree & university names..."):
+                        spell_prompt = f"Verify and correct any spelling errors in this Degree: '{deg}' and Institution: '{inst}'. Respond ONLY with the corrected details in this exact layout format: Corrected Degree | Corrected Institution. Do not include any other text."
+                        spell_response = model.generate_content(spell_prompt).text.strip()
+                        
+                        try:
+                            corrected_deg, corrected_inst = spell_response.split("|")
+                            deg = corrected_deg.strip()
+                            inst = corrected_inst.strip()
+                        except:
+                            pass # Fallback to original inputs if split fails
+                        
                     st.session_state.education.append({"degree": deg, "college": inst, "year": yr})
-                    st.success(f"Added entry for {deg} into buffer!")
+                    st.success(f"Added verified entry: {deg} from {inst}!")
                 else:
-                    st.warning("Please complete Qualification and Institution name entries.")
+                    st.warning("Please enter Qualification and Institution entries.")
 
     with col2:
-        st.subheader("💼 Career History Blocks")
+        # FORM 3: CAREER HISTORY WITH DEEP ACHIEVEMENTS GENERATION
+        st.subheader("💼 Section 3: Career History Blocks")
         with st.form("job_form", clear_on_submit=True):
-            j_title = st.text_input("Job Title / Designation", placeholder="Senior Academic Instructor / Operations Analyst")
-            comp = st.text_input("Company / Corporate Institution Name", placeholder="Public School / TVS Group")
+            j_title = st.text_input("Job Title / Designation", placeholder="Senior Teacher / Operations Specialist")
+            comp = st.text_input("Company / Corporate School Name", placeholder="TVS Group / Public School")
             dur = st.text_input("Tenure Duration Timeline", placeholder="2012 - 2018")
             y_exp = st.text_input("Total Years deployed in this track", placeholder="6")
             
             if st.form_submit_button("✨ Save & Auto-Generate AI Achievements"):
                 if j_title and y_exp:
-                    with st.spinner("AI is calculating role accomplishments..."):
-                        ai_prompt = f"Write professional, single-column ATS-friendly resume bullets starting directly with symbol characters for a candidate with Title: {j_title}, Company: {comp}, Years: {y_exp}. Only provide the raw points, no greeting text or summary introduction elements."
+                    with st.spinner("AI is calculating deep corporate achievements..."):
+                        ai_prompt = f"""
+                        Write a highly detailed, professional, broad achievements summary list for a resume.
+                        Role Designation: {j_title}
+                        Institution/Company Entity: {comp}
+                        Years Spent: {y_exp} years
+
+                        Execution Instructions:
+                        - Generate exactly 4 detailed bullet points highlighting deep operational milestones, classroom governance, or corporate administration depending on the track.
+                        - Focus on broad impacts (e.g., student grade improvements for teachers, supply chain efficiencies for corporate roles).
+                        - Output purely raw bullet items starting directly with '• ' characters. No intro wrappers.
+                        """
                         ai_response = model.generate_content(ai_prompt)
                         st.session_state.jobs.append({
                             "title": j_title, "company": comp, 
                             "duration": dur, "years": y_exp, 
                             "bullets": ai_response.text
                         })
-                        st.success(f"Successfully processed AI records layout for {j_title}!")
+                        st.success(f"Processed long-form career summary layout for {j_title}!")
                 else:
-                    st.warning("Please verify Job Designation and Total Years parameters before submitting.")
+                    st.warning("Please complete Designation and Years fields.")
 
-    if st.button("🧹 Clear All Entered Logs"):
+    if st.button("🧹 Clear All Entered Data Logs"):
         st.session_state.jobs = []
         st.session_state.education = []
+        st.session_state.personal_info = {"name": "", "email": "", "phone": "", "linkedin": "", "skills": ""}
         st.rerun()
 
     st.markdown("---")
     st.subheader("👀 Real-Time Live Profile Layout Preview")
     
-    st.markdown(f"# {full_name if full_name else 'Candidate Profile Outline'}")
-    st.write(f"📧 {email} | 📱 {phone} | 🔗 {linkedin}")
+    p_info = st.session_state.personal_info
+    st.markdown(f"# {p_info['name'] if p_info['name'] else 'Candidate Profile Outline'}")
+    st.write(f"📧 {p_info['email']} | 📱 {p_info['phone']} | 🔗 {p_info['linkedin']}")
     st.markdown("---")
     
     st.markdown("### 💼 Professional Work Timeline")
     if not st.session_state.jobs:
-        st.caption("No corporate or school career modules populated yet.")
+        st.caption("No career modules populated yet.")
     else:
         for job in st.session_state.jobs:
             st.markdown(f"**{job['title']}** at *{job['company']}* ({job['duration']}) — {job['years']} Years Active")
@@ -222,18 +260,15 @@ elif st.session_state.page == "builder":
             st.markdown(f"• **{edu['degree']}** — *{edu['college']}* (Class of {edu['year']})")
         
     st.markdown("### 🛠️ Core Functional Competencies")
-    if skills:
-        st.code(skills, language="text")
+    if p_info['skills']:
+        st.code(p_info['skills'], language="text")
 
-    if full_name and (st.session_state.jobs or st.session_state.education):
-        docx_data = generate_docx(
-            full_name, email, phone, linkedin, skills, 
-            st.session_state.jobs, st.session_state.education
-        )
+    if p_info['name'] and (st.session_state.jobs or st.session_state.education):
+        docx_data = generate_docx(p_info, st.session_state.jobs, st.session_state.education)
         st.download_button(
             label="📥 Download Clean ATS Resume Document (.docx)",
             data=docx_data,
-            file_name=f"{full_name.replace(' ', '_')}_Resume.docx",
+            file_name=f"{p_info['name'].replace(' ', '_')}_Resume.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
 
