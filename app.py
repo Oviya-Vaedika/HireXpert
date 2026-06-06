@@ -420,12 +420,9 @@ elif st.session_state.page == "builder":
             for e in st.session_state.education:
                 st.write(f"🎓 {strip_markdown_stars(e['degree'])} from {strip_markdown_stars(e['school'])}")
 
-        st.markdown("---")
+              st.markdown("---")
         if st.session_state.personal_info['name']:
             btn_col1, btn_col2 = st.columns(2)
-            with btn_col1:
-                st.download_button(
-                    label=f"📥 Download Direct PDF Asset",
             with btn_col1:
                 st.download_button(
                     label=f"📥 Download Direct PDF Asset",
@@ -456,3 +453,4 @@ elif st.session_state.page == "builder":
             """, 
             unsafe_allow_html=True
         )
+
