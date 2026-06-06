@@ -12,6 +12,7 @@ from datetime import datetime
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from io import BytesIO
+from fpdf import FPDF
 
 # Load Gemini API key from Streamlit Secrets
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -22,7 +23,7 @@ model = genai.GenerativeModel("gemini-2.5-flash")
 # App Page Layout Setup
 st.set_page_config(page_title="HireXpert", page_icon="🤖", layout="wide")
 
-# Initialize Session States safely across 6 Core Modules
+# Initialize Session States safely across 6 Student Application Modules
 if "page" not in st.session_state:
     st.session_state.page = "home"
 if "jobs" not in st.session_state:
@@ -38,6 +39,17 @@ if "skills_info" not in st.session_state:
 if "template" not in st.session_state:
     st.session_state.template = "Classic Corporate"
 
+# Helper Function to completely strip out markdown formatting asterisks
+def strip_markdown_stars(text):
+    if not text:
+        return ""
+    # Strip markdown bold markers (**bold** -> bold)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    # Strip plain asterisks and hanging bullet points cleanly
+    text = re.sub(r"\* ?", "", text)
+    return text.strip()
+
+# Extraction Helper Function for Analyzer Page
 def extract_text(uploaded_file):
     text = ""
     try:
@@ -59,6 +71,7 @@ def extract_text(uploaded_file):
         print(f"Extraction error: {e}") 
         return None
     return text.strip()
+# 📊 SMART ATS SCORING: Falls back to AI evaluation if the JD is too short
 def calculate_score(resume, job_desc):
     if not resume.strip() or not job_desc.strip():
         return 0.0
@@ -93,147 +106,148 @@ def set_cell_background(cell, fill_hex):
     shd.set(qn('w:fill'), fill_hex)
     tcPr.append(shd)
 
+# Pure Python Layout Engine to render PDF streams instantly from memory
+def generate_pdf_file():
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    
+    p_info = st.session_state.personal_info
+    s_info = st.session_state.skills_info
+    template = st.session_state.template
+    
+    if template == "Classic Corporate":
+        pdf.set_font("Times", size=11)
+        primary_color = (0, 0, 0)
+        secondary_color = (90, 90, 90)
+    elif template == "Modern Minimalist":
+        pdf.set_font("Arial", size=10)
+        primary_color = (44, 62, 80)
+        secondary_color = (127, 140, 141)
+    elif template == "Tech Startup":
+        pdf.set_font("Courier", size=11)
+        primary_color = (26, 188, 156)
+        secondary_color = (52, 73, 94)
+    else: 
+        pdf.set_font("Times", size=11)
+        primary_color = (139, 0, 0)
+        secondary_color = (60, 60, 60)
+        
+    # Header Module
+    pdf.set_text_color(*primary_color)
+    pdf.set_font(pdf.current_font.family, 'B', 22)
+    pdf.cell(0, 12, strip_markdown_stars(p_info['name'] if p_info['name'] else "Resume Profile"), ln=True, align='C' if template == "Classic Corporate" else 'L')
+    
+    pdf.set_text_color(*secondary_color)
+    pdf.set_font(pdf.current_font.family, size=10)
+    pdf.cell(0, 6, f"Email: {p_info['email']} | Phone: {p_info['phone']} | LinkedIn: {p_info['linkedin']}", ln=True, align='C' if template == "Classic Corporate" else 'L')
+    pdf.ln(5)
+    
+    # Skills Module
+    if s_info['skills']:
+        pdf.set_text_color(*primary_color)
+        pdf.set_font(pdf.current_font.family, 'B', 14)
+        pdf.cell(0, 10, "Core Competencies & Skills" if template != "Tech Startup" else "// Core Tech Stack", ln=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font(pdf.current_font.family, size=11)
+        pdf.multi_cell(0, 6, strip_markdown_stars(s_info['skills']))
+        pdf.ln(4)
+        
+    # Professional Record Module
+    if st.session_state.jobs:
+        pdf.set_text_color(*primary_color)
+        pdf.set_font(pdf.current_font.family, 'B', 14)
+        pdf.cell(0, 10, "Professional Experience" if template != "Tech Startup" else "// Technical Deployments", ln=True)
+        
+        for job in st.session_state.jobs:
+            pdf.set_text_color(*secondary_color)
+            pdf.set_font(pdf.current_font.family, 'B', 12)
+            pdf.cell(0, 8, f"{strip_markdown_stars(job['title'])} - {strip_markdown_stars(job['company'])}", ln=True)
+            pdf.set_font(pdf.current_font.family, 'I', 10)
+            pdf.cell(0, 6, f"{job['dates']} | {job['location']}", ln=True)
+            
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font(pdf.current_font.family, size=11)
+            for bullet in job['bullets'].split('\n'):
+                if bullet.strip():
+                    cleaned_b = strip_markdown_stars(bullet)
+                    if cleaned_b:
+                        pdf.multi_cell(0, 6, f"  - {cleaned_b}")
+            pdf.ln(2)
+            
+    # Projects Module
+    if st.session_state.projects:
+        pdf.set_text_color(*primary_color)
+        pdf.set_font(pdf.current_font.family, 'B', 14)
+        pdf.cell(0, 10, "Projects & Internships" if template != "Tech Startup" else "// Practical Implementations", ln=True)
+        
+        for proj in st.session_state.projects:
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font(pdf.current_font.family, 'B', 11)
+            pdf.cell(0, 7, f"{strip_markdown_stars(proj['title'])} ({proj['timeline']})", ln=True)
+            pdf.set_font(pdf.current_font.family, size=11)
+            pdf.multi_cell(0, 6, strip_markdown_stars(proj['details']))
+            pdf.ln(2)
+            
+    # Education Module
+    if st.session_state.education:
+        pdf.set_text_color(*primary_color)
+        pdf.set_font(pdf.current_font.family, 'B', 14)
+        pdf.cell(0, 10, "Education Qualifications" if template != "Tech Startup" else "// Academic Framework", ln=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font(pdf.current_font.family, size=11)
+        for edu in st.session_state.education:
+            pdf.multi_cell(0, 6, f"Education: {strip_markdown_stars(edu['degree'])} from {strip_markdown_stars(edu['school'])} ({edu['date']})")
+            if edu['details']:
+                pdf.multi_cell(0, 5, f"Details: {strip_markdown_stars(edu['details'])}")
+            pdf.ln(2)
+
+    return bytes(pdf.output())
+
+# Cleaned Word File Export Engine
 def generate_docx_file():
     doc = Document()
     p_info = st.session_state.personal_info
     s_info = st.session_state.skills_info
     template = st.session_state.template
     
-    if template == "Modern Minimalist":
-        style = doc.styles['Normal']
-        style.font.name = 'Arial'
-        style.font.size = Pt(10)
+    style = doc.styles['Normal']
+    style.font.name = 'Arial' if template == "Modern Minimalist" else 'Times New Roman'
+    style.font.size = Pt(11)
+    
+    np = doc.add_paragraph()
+    n_run = np.add_run(strip_markdown_stars(p_info['name']))
+    n_run.font.size = Pt(22)
+    n_run.bold = True
+    
+    doc.add_paragraph(f"Email: {p_info['email']} | Phone: {p_info['phone']} | LinkedIn: {p_info['linkedin']}")
+    
+    if s_info['skills']:
+        doc.add_heading('Core Competencies & Skills', level=1)
+        doc.add_paragraph(strip_markdown_stars(s_info['skills']))
         
-        table = doc.add_table(rows=1, cols=2)
-        table.autofit = False
-        table.columns[0].width = Inches(2.2)
-        table.columns[1].width = Inches(4.3)
-        
-        left_cell = table.cell(0, 0)
-        right_cell = table.cell(0, 1)
-        set_cell_background(left_cell, "F2F4F4")
-        
-        lp = left_cell.paragraphs[0]
-        ln_run = lp.add_run(f"{p_info['name']}\n\n")
-        ln_run.bold = True
-        ln_run.font.size = Pt(16)
-        ln_run.font.color.rgb = RGBColor(44, 62, 80)
-        
-        lp.add_run(f"📱 {p_info['phone']}\n✉️ {p_info['email']}\n🔗 {p_info['linkedin']}\n\n")
-        if s_info['skills']:
-            left_cell.add_paragraph().add_run("EXPERTISE & SKILLS\n").bold = True
-            left_cell.add_paragraph(s_info['skills'].replace(',', '\n'))
-            
-        if st.session_state.jobs:
-            right_cell.add_paragraph().add_run("PROFESSIONAL EXPERIENCE").bold = True
-            for job in st.session_state.jobs:
-                jp = right_cell.add_paragraph()
-                jp.add_run(f"▪ {job['title']} — {job['company']} ({job['dates']})\n").bold = True
-                for b in job['bullets'].split('\n'):
-                    if b.strip():
-                        right_cell.add_paragraph(style='List Bullet').add_run(b.replace('-', '').strip())
-                        
-        if st.session_state.projects:
-            right_cell.add_paragraph().add_run("\nPROJECTS & INTERNSHIPS").bold = True
-            for proj in st.session_state.projects:
-                pp = right_cell.add_paragraph()
-                pp.add_run(f"🚀 {proj['title']} ({proj['timeline']})\n").bold = True
-                pp.add_run(proj['details'])
+    if st.session_state.jobs:
+        doc.add_heading('Professional Experience', level=1)
+        for job in st.session_state.jobs:
+            p = doc.add_paragraph()
+            p.add_run(f"{strip_markdown_stars(job['title'])} — {strip_markdown_stars(job['company'])} ({job['dates']})\n").bold = True
+            for b in job['bullets'].split('\n'):
+                if b.strip():
+                    cleaned_bullet = strip_markdown_stars(b)
+                    if cleaned_bullet:
+                        doc.add_paragraph(style='List Bullet').add_run(cleaned_bullet)
+                    
+    if st.session_state.projects:
+        doc.add_heading('Projects & Internships', level=1)
+        for proj in st.session_state.projects:
+            p = doc.add_paragraph()
+            p.add_run(f"{strip_markdown_stars(proj['title'])} ({proj['timeline']})\n").bold = True
+            p.add_run(strip_markdown_stars(proj['details']))
 
-        if st.session_state.education:
-            right_cell.add_paragraph().add_run("\nEDUCATION").bold = True
-            for edu in st.session_state.education:
-                right_cell.add_paragraph().add_run(f"🎓 {edu['degree']} — {edu['school']} ({edu['date']})")
-
-    elif template == "Tech Startup":
-        style = doc.styles['Normal']
-        style.font.name = 'Calibri'
-        style.font.size = Pt(11)
-        
-        banner_table = doc.add_table(rows=1, cols=1)
-        cell = banner_table.cell(0, 0)
-        set_cell_background(cell, "1ABC9C")
-        
-        bp = cell.paragraphs[0]
-        bp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        n_run = bp.add_run(p_info['name'] if p_info['name'] else "Developer Profile")
-        n_run.font.size = Pt(22)
-        n_run.bold = True
-        n_run.font.color.rgb = RGBColor(255, 255, 255)
-        
-        mp = doc.add_paragraph()
-        mp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        mp.add_run(f"{p_info['email']} | {p_info['phone']} | {p_info['linkedin']}")
-        
-        if s_info['skills']:
-            doc.add_heading("// Technical Core Architecture", level=1).font.color.rgb = RGBColor(52, 73, 94)
-            doc.add_paragraph(s_info['skills'])
-            
-        if st.session_state.jobs:
-            doc.add_heading("// Professional Deployments", level=1).font.color.rgb = RGBColor(52, 73, 94)
-            for job in st.session_state.jobs:
-                doc.add_paragraph(f"{job['title']} @ {job['company']} ({job['dates']})").bold = True
-                for b in job['bullets'].split('\n'):
-                    if b.strip():
-                        doc.add_paragraph(style='List Bullet').add_run(b.replace('-', '').strip())
-
-        if st.session_state.projects:
-            doc.add_heading("// Practical Implementations", level=1).font.color.rgb = RGBColor(52, 73, 94)
-            for proj in st.session_state.projects:
-                doc.add_paragraph(f"{proj['title']} — {proj['timeline']}").bold = True
-                doc.add_paragraph(proj['details'])
-
-        if st.session_state.education:
-            doc.add_heading("// Academic Framework", level=1).font.color.rgb = RGBColor(52, 73, 94)
-            for edu in st.session_state.education:
-                doc.add_paragraph(f"{edu['degree']} — {edu['school']} ({edu['date']})")
-
-    else:
-        is_exec = (template == "Executive Elegance")
-        font_choice = "Georgia" if is_exec else "Times New Roman"
-        color_choice = RGBColor(139, 0, 0) if is_exec else RGBColor(0, 0, 0)
-        
-        style = doc.styles['Normal']
-        style.font.name = font_choice
-        style.font.size = Pt(11)
-        
-        np = doc.add_paragraph()
-        np.alignment = WD_ALIGN_PARAGRAPH.RIGHT if is_exec else WD_ALIGN_PARAGRAPH.CENTER
-        n_run = np.add_run(p_info['name'])
-        n_run.font.size = Pt(22)
-        n_run.bold = True
-        n_run.font.color.rgb = color_choice
-        
-        ip = doc.add_paragraph()
-        ip.alignment = WD_ALIGN_PARAGRAPH.RIGHT if is_exec else WD_ALIGN_PARAGRAPH.CENTER
-        ip.add_run(f"{p_info['email']} | {p_info['phone']} | {p_info['linkedin']}")
-        
-        doc.add_paragraph("═" * 55).alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        if s_info['skills']:
-            doc.add_paragraph().add_run("CORE COMPETENCIES").bold = True
-            doc.add_paragraph(s_info['skills'])
-            
-        if st.session_state.jobs:
-            doc.add_paragraph().add_run("\nWORK HISTORY RECORD").bold = True
-            for job in st.session_state.jobs:
-                p = doc.add_paragraph()
-                p.add_run(f"{job['title']} — {job['company']} ({job['dates']})\n").bold = True
-                for b in job['bullets'].split('\n'):
-                    if b.strip():
-                        doc.add_paragraph(style='List Bullet').add_run(b.replace('-', '').strip())
-                        
-        if st.session_state.projects:
-            doc.add_paragraph().add_run("\nPROJECT INITIATIVES").bold = True
-            for proj in st.session_state.projects:
-                p = doc.add_paragraph()
-                p.add_run(f"{proj['title']} ({proj['timeline']})\n").bold = True
-                doc.add_paragraph(proj['details'])
-
-        if st.session_state.education:
-            doc.add_paragraph().add_run("\nACADEMIC QUALIFICATIONS").bold = True
-            for edu in st.session_state.education:
-                doc.add_paragraph(f"• {edu['degree']} from {edu['school']} ({edu['date']})")
+    if st.session_state.education:
+        doc.add_heading('Education Qualifications', level=1)
+        for edu in st.session_state.education:
+            doc.add_paragraph(f"• {strip_markdown_stars(edu['degree'])} from {strip_markdown_stars(edu['school'])} ({edu['date']})")
 
     bio = BytesIO()
     doc.save(bio)
@@ -303,7 +317,7 @@ elif st.session_state.page == "builder":
             if st.form_submit_button("➕ Add Work Position Profile"):
                 if job_title and company:
                     with st.spinner("Optimizing job points using AI metrics..."):
-                        bullets = model.generate_content(f"Convert into 3 powerful resume bullet points starting with standard (-): {raw_desc}").text.strip() if raw_desc.strip() else "- Performance managed roles."
+                        bullets = model.generate_content(f"Convert into 3 powerful resume bullet points starting with standard (-). Strip out any wrapping asterisks or markdown decorators. Text: {raw_desc}").text.strip() if raw_desc.strip() else "- Performance managed roles."
                     st.session_state.jobs.append({"title": job_title, "company": company, "dates": dates, "location": location, "bullets": bullets})
                     st.rerun()
 
@@ -337,7 +351,7 @@ elif st.session_state.page == "builder":
             if st.form_submit_button("🤖 Abbreviate & Expand via Semantic Engine"):
                 if skills_input.strip():
                     with st.spinner("Analyzing skill matrices..."):
-                        skill_prompt = f"Extract and optimize the technical competencies from this text. Convert into a neat, clean, high-density comma-separated list of short professional keywords (e.g. React.js, Python, AWS Cloud). Expand missing key industry standard terms where relevant. Output ONLY the list items. Text: {skills_input}"
+                        skill_prompt = f"Extract the technical competencies from this text. Convert into a neat comma-separated list of keywords. Strip out any markdown formatting asterisks. Text: {skills_input}"
                         optimized_skills = model.generate_content(skill_prompt).text.strip()
                         st.session_state.skills_info = {"skills": optimized_skills}
                         st.success("Skills matrix optimized!")
@@ -355,61 +369,90 @@ elif st.session_state.page == "builder":
         st.markdown("---")
         st.subheader("👁️ Live Structural Mockup Viewport")
         
-        # ----------------------------------------------------
-        # SCREEN STRUCTURE RENDERER: MODERN MINIMALIST (TWO COLUMN GRID)
-        # ----------------------------------------------------
+        clean_name = strip_markdown_stars(st.session_state.personal_info['name'])
+        
         if st.session_state.template == "Modern Minimalist":
-            m_col1, m_col2 = st.columns([1, 2])
+            m_col1, m_col2 = st.columns(2)
             with m_col1:
-                st.markdown(f"### **{st.session_state.personal_info['name']}**")
+                st.markdown(f"### **{clean_name}**")
                 st.caption(f"📱 {st.session_state.personal_info['phone']}\n\n✉️ {st.session_state.personal_info['email']}")
                 if st.session_state.skills_info['skills']:
                     st.markdown("**EXPERTISE**")
                     for s in st.session_state.skills_info['skills'].split(','):
-                        st.markdown(f"- {s.strip()}")
+                        st.markdown(f"- {strip_markdown_stars(s)}")
             with m_col2:
                 if st.session_state.jobs:
-                    st.markdown("#### **PROFESSIONAL REFRENCES**")
+                    st.markdown("#### **PROFESSIONAL REFERENCES**")
                     for j in st.session_state.jobs:
-                        st.markdown(f"**{j['title']}** at *{j['company']}* ({j['dates']})")
-                        st.write(j['bullets'])
+                        st.markdown(f"**{strip_markdown_stars(j['title'])}** at *{strip_markdown_stars(j['company'])}* ({j['dates']})")
+                        st.write(strip_markdown_stars(j['bullets']))
                         
-        # ----------------------------------------------------
-        # SCREEN STRUCTURE RENDERER: TECH STARTUP (TOP COLOR ACCENT BAR)
-        # ----------------------------------------------------
         elif st.session_state.template == "Tech Startup":
-            st.success(f"📌 TOP HEADER ACTIVE // {st.session_state.personal_info['name'].upper()}")
+            st.success(f"📌 TOP HEADER ACTIVE // {clean_name.upper()}")
             st.write(f"⚙️ Info Matrix: {st.session_state.personal_info['email']} | {st.session_state.personal_info['phone']}")
             st.markdown("---")
             if st.session_state.skills_info['skills']:
-                st.write(f"**// Core Stack:** {st.session_state.skills_info['skills']}")
+                st.write(f"**// Core Stack:** {strip_markdown_stars(st.session_state.skills_info['skills'])}")
             for j in st.session_state.jobs:
-                st.write(f"💼 **// Deployment:** {j['title']} @ {j['company']}")
-                st.write(j['bullets'])
+                st.write(f"💼 **// Deployment:** {strip_markdown_stars(j['title'])} @ {strip_markdown_stars(j['company'])}")
+                st.write(strip_markdown_stars(j['bullets']))
 
-        # ----------------------------------------------------
-        # SCREEN STRUCTURE RENDERER: CLASSIC & EXECUTIVE (CENTERED LINEAR)
-        # ----------------------------------------------------
         else:
             align_prefix = "###" if st.session_state.template == "Classic Corporate" else "### <div style='text-align: right;'>"
-            st.markdown(f"{align_prefix} **{st.session_state.personal_info['name']}** </div>", unsafe_allow_html=True)
+            st.markdown(f"{align_prefix} **{clean_name}** </div>", unsafe_allow_html=True)
             st.markdown(f"<div style='text-align: center;'> {st.session_state.personal_info['email']} | {st.session_state.personal_info['phone']} </div>", unsafe_allow_html=True)
             st.markdown("---")
             if st.session_state.skills_info['skills']:
-                st.write(f"**CORE COMPETENCIES:** {st.session_state.skills_info['skills']}")
+                st.write(f"**CORE COMPETENCIES:** {strip_markdown_stars(st.session_state.skills_info['skills'])}")
             for j in st.session_state.jobs:
-                st.write(f"**{j['title']}** — {j['company']} ({j['dates']})")
-                st.write(j['bullets'])
+                st.write(f"**{strip_markdown_stars(j['title'])}** — {strip_markdown_stars(j['company'])} ({j['dates']})")
+                st.write(strip_markdown_stars(j['bullets']))
                 
-        # Common lists at bottom of layout preview for structural testing
         if st.session_state.projects:
             st.markdown("---")
             st.markdown("#### **Project Subsystem Frameworks**")
             for p in st.session_state.projects:
-                st.write(f"🚀 **{p['title']}** ({p['timeline']}): {p['details']}")
+                st.write(f"🚀 **{strip_markdown_stars(p['title'])}** ({p['timeline']}): {strip_markdown_stars(p['details'])}")
                 
         if st.session_state.education:
             st.markdown("---")
-            st.markdown("#### **Acedemic Credentials**")
+            st.markdown("#### **Academic Credentials**")
             for e in st.session_state.education:
-st.write(f"🎓 {e['degree']} from {e['school']}")st.markdown("---")if st.session_state.personal_info['name']:st.download_button(label=f"📥 Download Fully Structured {st.session_state.template} File (.docx)",data=generate_docx_file(),file_name=f"HireXpert_{st.session_state.template.replace(' ', '_')}.docx",mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",use_container_width=True)
+                st.write(f"🎓 {strip_markdown_stars(e['degree'])} from {strip_markdown_stars(e['school'])}")
+
+        st.markdown("---")
+        if st.session_state.personal_info['name']:
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                st.download_button(
+                    label=f"📥 Download Direct PDF Asset",
+            with btn_col1:
+                st.download_button(
+                    label=f"📥 Download Direct PDF Asset",
+                    data=generate_pdf_file(),
+                    file_name=f"HireXpert_{st.session_state.template.replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+                
+            with btn_col2:
+                st.download_button(
+                    label=f"📄 Download Word File (.docx)",
+                    data=generate_docx_file(),
+                    file_name=f"HireXpert_{st.session_state.template.replace(' ', '_')}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True
+                )
+        else:
+            st.warning("Complete Box 1 (Personal Details) with a validated name to unlock PDF & Word download engines.")
+
+        # --- STUDENT COMPONENT APP FOOTER ---
+        st.markdown("---")
+        st.markdown(
+            """
+            <div style='text-align: center; color: #7f8c8d; font-size: 14px; padding-top: 10px;'>
+                🤖 Made with ❤️ by <b>HireXpert Student Team</b> | © 2026 AI Resume Engine
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
