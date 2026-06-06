@@ -22,7 +22,7 @@ model = genai.GenerativeModel("gemini-2.5-flash")
 # App Page Layout Setup
 st.set_page_config(page_title="HireXpert", page_icon="🤖", layout="wide")
 
-# Initialize Session States safely for 6 Core Modules
+# Initialize Session States safely across 6 Core Modules
 if "page" not in st.session_state:
     st.session_state.page = "home"
 if "jobs" not in st.session_state:
@@ -38,7 +38,6 @@ if "skills_info" not in st.session_state:
 if "template" not in st.session_state:
     st.session_state.template = "Classic Corporate"
 
-# Extraction Helper Function for Analyzer Page
 def extract_text(uploaded_file):
     text = ""
     try:
@@ -60,7 +59,6 @@ def extract_text(uploaded_file):
         print(f"Extraction error: {e}") 
         return None
     return text.strip()
-# 📊 SMART ATS SCORING: Falls back to AI evaluation if the JD is too short
 def calculate_score(resume, job_desc):
     if not resume.strip() or not job_desc.strip():
         return 0.0
@@ -68,12 +66,10 @@ def calculate_score(resume, job_desc):
     if len(job_desc.split()) < 10:
         try:
             score_prompt = f"""
-            You are an ATS (Applicant Tracking System) algorithm. Compare this resume against the target role title.
+            You are an ATS algorithm. Compare this resume against the target role title.
             Target Role: {job_desc}
             Resume Content: {resume}
-            
-            Based on the candidate's skills, industry background, and job titles, calculate an alignment score from 0 to 100.
-            Output ONLY a single number representing the percentage (e.g., 78.5). Do not write any letters, words, or symbols.
+            Output ONLY a single number representing the percentage alignment (e.g., 78.5). No words.
             """
             ai_score_response = model.generate_content(score_prompt).text.strip()
             cleaned_score = re.findall(r"\d+\.\d+|\d+", ai_score_response)
@@ -89,7 +85,6 @@ def calculate_score(resume, job_desc):
         return round(similarity * 100, 2)
     except:
         return 0.0
-# Helper to set cell background colors for advanced modern layouts
 def set_cell_background(cell, fill_hex):
     tcPr = cell._tc.get_or_add_tcPr()
     shd = OxmlElement('w:shd')
@@ -104,9 +99,6 @@ def generate_docx_file():
     s_info = st.session_state.skills_info
     template = st.session_state.template
     
-    # ----------------------------------------------------
-    # DESIGN STRATEGY 1: MODERN TWO-COLUMN SIDEBAR
-    # ----------------------------------------------------
     if template == "Modern Minimalist":
         style = doc.styles['Normal']
         style.font.name = 'Arial'
@@ -114,34 +106,30 @@ def generate_docx_file():
         
         table = doc.add_table(rows=1, cols=2)
         table.autofit = False
-        table.columns[0].width = Inches(2.2) # Left Sidebar Column
-        table.columns[1].width = Inches(4.3) # Main Body Content
+        table.columns[0].width = Inches(2.2)
+        table.columns[1].width = Inches(4.3)
         
         left_cell = table.cell(0, 0)
         right_cell = table.cell(0, 1)
         set_cell_background(left_cell, "F2F4F4")
         
-        # Module 1 & 5: Sidebar Personal Info & Technical Skills
         lp = left_cell.paragraphs[0]
-        ln_run = lp.add_run(f"{p_info['name'] if p_info['name'] else 'Profile name'}\n\n")
+        ln_run = lp.add_run(f"{p_info['name']}\n\n")
         ln_run.bold = True
         ln_run.font.size = Pt(16)
         ln_run.font.color.rgb = RGBColor(44, 62, 80)
         
         lp.add_run(f"📱 {p_info['phone']}\n✉️ {p_info['email']}\n🔗 {p_info['linkedin']}\n\n")
         if s_info['skills']:
-            sk_head = left_cell.add_paragraph().add_run("EXPERTISE & SKILLS\n")
-            sk_head.bold = True
+            left_cell.add_paragraph().add_run("EXPERTISE & SKILLS\n").bold = True
             left_cell.add_paragraph(s_info['skills'].replace(',', '\n'))
             
-        # Module 2, 3 & 4: Main Column Content
         if st.session_state.jobs:
             right_cell.add_paragraph().add_run("PROFESSIONAL EXPERIENCE").bold = True
             for job in st.session_state.jobs:
                 jp = right_cell.add_paragraph()
                 jp.add_run(f"▪ {job['title']} — {job['company']} ({job['dates']})\n").bold = True
-                bullets = job['bullets'].split('\n')
-                for b in bullets:
+                for b in job['bullets'].split('\n'):
                     if b.strip():
                         right_cell.add_paragraph(style='List Bullet').add_run(b.replace('-', '').strip())
                         
@@ -153,14 +141,10 @@ def generate_docx_file():
                 pp.add_run(proj['details'])
 
         if st.session_state.education:
-            right_cell.add_paragraph().add_run("\nEDUCATION QUALIFICATIONS").bold = True
+            right_cell.add_paragraph().add_run("\nEDUCATION").bold = True
             for edu in st.session_state.education:
-                ep = right_cell.add_paragraph()
-                ep.add_run(f"🎓 {edu['degree']} from {edu['school']} ({edu['date']})")
+                right_cell.add_paragraph().add_run(f"🎓 {edu['degree']} — {edu['school']} ({edu['date']})")
 
-    # ----------------------------------------------------
-    # DESIGN STRATEGY 2: TECH STARTUP TOP BANNER ACCENT
-    # ----------------------------------------------------
     elif template == "Tech Startup":
         style = doc.styles['Normal']
         style.font.name = 'Calibri'
@@ -189,15 +173,14 @@ def generate_docx_file():
             doc.add_heading("// Professional Deployments", level=1).font.color.rgb = RGBColor(52, 73, 94)
             for job in st.session_state.jobs:
                 doc.add_paragraph(f"{job['title']} @ {job['company']} ({job['dates']})").bold = True
-                bullets = job['bullets'].split('\n')
-                for b in bullets:
+                for b in job['bullets'].split('\n'):
                     if b.strip():
                         doc.add_paragraph(style='List Bullet').add_run(b.replace('-', '').strip())
 
         if st.session_state.projects:
-            doc.add_heading("// Practical Implementations & Internships", level=1).font.color.rgb = RGBColor(52, 73, 94)
+            doc.add_heading("// Practical Implementations", level=1).font.color.rgb = RGBColor(52, 73, 94)
             for proj in st.session_state.projects:
-                p = doc.add_paragraph(f"{proj['title']} — {proj['timeline']}").bold = True
+                doc.add_paragraph(f"{proj['title']} — {proj['timeline']}").bold = True
                 doc.add_paragraph(proj['details'])
 
         if st.session_state.education:
@@ -205,9 +188,6 @@ def generate_docx_file():
             for edu in st.session_state.education:
                 doc.add_paragraph(f"{edu['degree']} — {edu['school']} ({edu['date']})")
 
-    # ----------------------------------------------------
-    # DESIGN STRATEGY 3 & 4: CORPORATE / EXECUTIVE BALANCED STACKS
-    # ----------------------------------------------------
     else:
         is_exec = (template == "Executive Elegance")
         font_choice = "Georgia" if is_exec else "Times New Roman"
@@ -235,17 +215,16 @@ def generate_docx_file():
             doc.add_paragraph(s_info['skills'])
             
         if st.session_state.jobs:
-            doc.add_paragraph().add_run("\nCHRONOLOGICAL WORK RECORD").bold = True
+            doc.add_paragraph().add_run("\nWORK HISTORY RECORD").bold = True
             for job in st.session_state.jobs:
                 p = doc.add_paragraph()
                 p.add_run(f"{job['title']} — {job['company']} ({job['dates']})\n").bold = True
-                bullets = job['bullets'].split('\n')
-                for b in bullets:
+                for b in job['bullets'].split('\n'):
                     if b.strip():
                         doc.add_paragraph(style='List Bullet').add_run(b.replace('-', '').strip())
                         
         if st.session_state.projects:
-            doc.add_paragraph().add_run("\nTECHNICAL INITIATIVES & INTERNSHIPS").bold = True
+            doc.add_paragraph().add_run("\nPROJECT INITIATIVES").bold = True
             for proj in st.session_state.projects:
                 p = doc.add_paragraph()
                 p.add_run(f"{proj['title']} ({proj['timeline']})\n").bold = True
@@ -303,18 +282,18 @@ elif st.session_state.page == "builder":
     
     with col1:
         # MODULE 1: PERSONAL DETAILS
-        st.subheader("👤 Personal Details")
+        st.subheader("👤 Box 1: Personal Details")
         with st.form("personal_form"):
-            f_name = st.text_input("Full Name", value=st.session_state.personal_info["name"], placeholder="Jane Doe")
-            e_mail = st.text_input("Email Address", value=st.session_state.personal_info["email"], placeholder="jane@example.com")
-            p_hone = st.text_input("Phone Number", value=st.session_state.personal_info["phone"], placeholder="+91 98765 43210")
+            f_name = st.text_input("Full Name", value=st.session_state.personal_info["name"])
+            e_mail = st.text_input("Email Address", value=st.session_state.personal_info["email"])
+            p_hone = st.text_input("Phone Number", value=st.session_state.personal_info["phone"])
             l_inkedin = st.text_input("LinkedIn Profile URL", value=st.session_state.personal_info["linkedin"])
             if st.form_submit_button("💾 Save Personal Data"):
                 st.session_state.personal_info = {"name": f_name, "email": e_mail, "phone": p_hone, "linkedin": l_inkedin}
                 st.success("Personal Details saved!")
 
-        # MODULE 2: WORK EXPERIENCE WITH MULTI-APPEND TRIGGER 
-        st.subheader("💼 Professional Experience")
+        # MODULE 2: WORK EXPERIENCE WITH APPEND
+        st.subheader("💼 Box 2: Professional Experience")
         with st.form("experience_form", clear_on_submit=True):
             job_title = st.text_input("Job Title / Position")
             company = st.text_input("Company / Organization")
@@ -326,11 +305,10 @@ elif st.session_state.page == "builder":
                     with st.spinner("Optimizing job points using AI metrics..."):
                         bullets = model.generate_content(f"Convert into 3 powerful resume bullet points starting with standard (-): {raw_desc}").text.strip() if raw_desc.strip() else "- Performance managed roles."
                     st.session_state.jobs.append({"title": job_title, "company": company, "dates": dates, "location": location, "bullets": bullets})
-                    st.success(f"Added position entry for {job_title}!")
                     st.rerun()
 
         # MODULE 3: EDUCATION
-        st.subheader("🎓 Academic Qualifications")
+        st.subheader("🎓 Box 3: Academic Qualifications")
         with st.form("education_form", clear_on_submit=True):
             school_name = st.text_input("Institution / University Name")
             degree_name = st.text_input("Degree / Major")
@@ -339,82 +317,99 @@ elif st.session_state.page == "builder":
             if st.form_submit_button("➕ Add Academic History Entry"):
                 if school_name and degree_name:
                     st.session_state.education.append({"school": school_name, "degree": degree_name, "date": grad_date, "details": edu_details})
-                    st.success("Education entry added!")
                     st.rerun()
 
         # MODULE 4: PROJECTS OR INTERNSHIPS
-        st.subheader("🚀 Projects & Internships")
+        st.subheader("🚀 Box 4: Projects & Internships")
         with st.form("project_form", clear_on_submit=True):
-            p_title = st.text_input("Project / Internship Title", placeholder="e.g., E-Commerce Architecture Backend")
-            p_time = st.text_input("Timeline / Duration", placeholder="e.g., Jan 2024 - Mar 2024")
+            p_title = st.text_input("Project / Internship Title")
+            p_time = st.text_input("Timeline / Duration")
             p_desc = st.text_area("Scope & Technologies Used Summary")
             if st.form_submit_button("➕ Add Project Portfolio Entry"):
                 if p_title:
                     st.session_state.projects.append({"title": p_title, "timeline": p_time, "details": p_desc})
-                    st.success("Project entry successfully stored!")
                     st.rerun()
 
-        # MODULE 5: SKILLS
-        st.subheader("🛠️ Core Competencies & Skills")
+        # MODULE 5: SKILLS WITH INTELLIGENT ACCELERATOR/EXPANDER
+        st.subheader("🛠️ Box 5: Core Competencies & Skills Optimization")
         with st.form("skills_form"):
-            skills_input = st.text_area("Skills (Comma-separated matrix)", value=st.session_state.skills_info["skills"], placeholder="Python, Django, AWS Cloud Architecture")
-            if st.form_submit_button("💾 Save Skills Entry"):
-                st.session_state.skills_info = {"skills": skills_input}
-                st.success("Skills stored successfully!")
+            skills_input = st.text_area("Type raw paragraph notes or technologies list here:")
+            if st.form_submit_button("🤖 Abbreviate & Expand via Semantic Engine"):
+                if skills_input.strip():
+                    with st.spinner("Analyzing skill matrices..."):
+                        skill_prompt = f"Extract and optimize the technical competencies from this text. Convert into a neat, clean, high-density comma-separated list of short professional keywords (e.g. React.js, Python, AWS Cloud). Expand missing key industry standard terms where relevant. Output ONLY the list items. Text: {skills_input}"
+                        optimized_skills = model.generate_content(skill_prompt).text.strip()
+                        st.session_state.skills_info = {"skills": optimized_skills}
+                        st.success("Skills matrix optimized!")
+                else:
+                    st.error("Please enter a few keywords or paragraph blocks.")
 
-    # MODULE 6: TEMPLATE CONTROL PANEL & VIEWPORT REAL-TIME DRAW WINDOWS
+    # MODULE 6: LIVE LAYOUT ENGINE SELECTION DISPLAY PREVIEW
     with col2:
-        st.subheader("🎨 Template Strategy Framework")
+        st.subheader("🎨 Box 6: Template Strategy Framework Layout Selector")
         st.session_state.template = st.selectbox(
-            "Select Layout Style Blueprint (Changes Document Structure)", 
+            "Select Layout Style Blueprint Structure:", 
             ["Classic Corporate", "Modern Minimalist", "Tech Startup", "Executive Elegance"]
         )
         
-        st.info(f"Blueprint Strategy: **{st.session_state.template}**")
         st.markdown("---")
-        st.subheader("👁️ Dynamic Profile Mockup Tracker")
+        st.subheader("👁️ Live Structural Mockup Viewport")
         
-        # Display Mockup Summaries live as data saves
-        st.markdown(f"### **{st.session_state.personal_info['name'] if st.session_state.personal_info['name'] else 'Your Identity Title'}**")
-        st.write(f"✉️ {st.session_state.personal_info['email']} | 📱 {st.session_state.personal_info['phone']} | 🔗 {st.session_state.personal_info['linkedin']}")
-        
-        if st.session_state.skills_info['skills']:
-            st.markdown(f"**Core Expertise:** {st.session_state.skills_info['skills']}")
-            
-        if st.session_state.jobs:
-            st.markdown("#### **Professional Trajectory**")
-            for idx, j in enumerate(st.session_state.jobs):
-                st.write(f"💼 **{j['title']}** at {j['company']} ({j['dates']})")
-                st.caption(j['bullets'])
-                if st.button(f"🗑️ Clear Job {idx+1}", key=f"rm_j_{idx}"):
-                    st.session_state.jobs.pop(idx)
-                    st.rerun()
-                    
-        if st.session_state.projects:
-            st.markdown("#### **Project Initiatives**")
-            for idx, p in enumerate(st.session_state.projects):
-                st.write(f"🚀 **{p['title']}** ({p['timeline']})")
-                st.write(p['details'])
-                if st.button(f"🗑️ Clear Project {idx+1}", key=f"rm_p_{idx}"):
-                    st.session_state.projects.pop(idx)
-                    st.rerun()
+        # ----------------------------------------------------
+        # SCREEN STRUCTURE RENDERER: MODERN MINIMALIST (TWO COLUMN GRID)
+        # ----------------------------------------------------
+        if st.session_state.template == "Modern Minimalist":
+            m_col1, m_col2 = st.columns([1, 2])
+            with m_col1:
+                st.markdown(f"### **{st.session_state.personal_info['name']}**")
+                st.caption(f"📱 {st.session_state.personal_info['phone']}\n\n✉️ {st.session_state.personal_info['email']}")
+                if st.session_state.skills_info['skills']:
+                    st.markdown("**EXPERTISE**")
+                    for s in st.session_state.skills_info['skills'].split(','):
+                        st.markdown(f"- {s.strip()}")
+            with m_col2:
+                if st.session_state.jobs:
+                    st.markdown("#### **PROFESSIONAL REFRENCES**")
+                    for j in st.session_state.jobs:
+                        st.markdown(f"**{j['title']}** at *{j['company']}* ({j['dates']})")
+                        st.write(j['bullets'])
+                        
+        # ----------------------------------------------------
+        # SCREEN STRUCTURE RENDERER: TECH STARTUP (TOP COLOR ACCENT BAR)
+        # ----------------------------------------------------
+        elif st.session_state.template == "Tech Startup":
+            st.success(f"📌 TOP HEADER ACTIVE // {st.session_state.personal_info['name'].upper()}")
+            st.write(f"⚙️ Info Matrix: {st.session_state.personal_info['email']} | {st.session_state.personal_info['phone']}")
+            st.markdown("---")
+            if st.session_state.skills_info['skills']:
+                st.write(f"**// Core Stack:** {st.session_state.skills_info['skills']}")
+            for j in st.session_state.jobs:
+                st.write(f"💼 **// Deployment:** {j['title']} @ {j['company']}")
+                st.write(j['bullets'])
 
-        if st.session_state.education:
-            st.markdown("#### **Academic History**")
-            for idx, e in enumerate(st.session_state.education):
-                st.write(f"🎓 **{e['degree']}** — {e['school']} ({e['date']})")
-                if st.button(f"🗑️ Clear Education {idx+1}", key=f"rm_e_{idx}"):
-                    st.session_state.education.pop(idx)
-                    st.rerun()
-            
-        st.markdown("---")
-        if st.session_state.personal_info['name']:
-            st.download_button(
-                label=f"📥 Download Fully Structured {st.session_state.template} File",
-                data=generate_docx_file(),
-                file_name=f"HireXpert_{st.session_state.template.replace(' ', '_')}_{st.session_state.personal_info['name'].replace(' ', '_')}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True
-            )
+        # ----------------------------------------------------
+        # SCREEN STRUCTURE RENDERER: CLASSIC & EXECUTIVE (CENTERED LINEAR)
+        # ----------------------------------------------------
         else:
-            st.warning("Complete Box 1 (Personal Details) with validated name attributes to enable document downloads.")
+            align_prefix = "###" if st.session_state.template == "Classic Corporate" else "### <div style='text-align: right;'>"
+            st.markdown(f"{align_prefix} **{st.session_state.personal_info['name']}** </div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align: center;'> {st.session_state.personal_info['email']} | {st.session_state.personal_info['phone']} </div>", unsafe_allow_html=True)
+            st.markdown("---")
+            if st.session_state.skills_info['skills']:
+                st.write(f"**CORE COMPETENCIES:** {st.session_state.skills_info['skills']}")
+            for j in st.session_state.jobs:
+                st.write(f"**{j['title']}** — {j['company']} ({j['dates']})")
+                st.write(j['bullets'])
+                
+        # Common lists at bottom of layout preview for structural testing
+        if st.session_state.projects:
+            st.markdown("---")
+            st.markdown("#### **Project Subsystem Frameworks**")
+            for p in st.session_state.projects:
+                st.write(f"🚀 **{p['title']}** ({p['timeline']}): {p['details']}")
+                
+        if st.session_state.education:
+            st.markdown("---")
+            st.markdown("#### **Acedemic Credentials**")
+            for e in st.session_state.education:
+st.write(f"🎓 {e['degree']} from {e['school']}")st.markdown("---")if st.session_state.personal_info['name']:st.download_button(label=f"📥 Download Fully Structured {st.session_state.template} File (.docx)",data=generate_docx_file(),file_name=f"HireXpert_{st.session_state.template.replace(' ', '_')}.docx",mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",use_container_width=True)
