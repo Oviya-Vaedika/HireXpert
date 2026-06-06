@@ -303,7 +303,7 @@ elif st.session_state.page == "builder":
     
     with col1:
         # MODULE 1: PERSONAL DETAILS
-        st.subheader("👤 Box 1: Personal Details")
+        st.subheader("👤 Personal Details")
         with st.form("personal_form"):
             f_name = st.text_input("Full Name", value=st.session_state.personal_info["name"], placeholder="Jane Doe")
             e_mail = st.text_input("Email Address", value=st.session_state.personal_info["email"], placeholder="jane@example.com")
@@ -314,7 +314,7 @@ elif st.session_state.page == "builder":
                 st.success("Personal Details saved!")
 
         # MODULE 2: WORK EXPERIENCE WITH MULTI-APPEND TRIGGER 
-        st.subheader("💼 Box 2: Professional Experience")
+        st.subheader("💼 Professional Experience")
         with st.form("experience_form", clear_on_submit=True):
             job_title = st.text_input("Job Title / Position")
             company = st.text_input("Company / Organization")
@@ -330,7 +330,7 @@ elif st.session_state.page == "builder":
                     st.rerun()
 
         # MODULE 3: EDUCATION
-        st.subheader("🎓 Box 3: Academic Qualifications")
+        st.subheader("🎓 Academic Qualifications")
         with st.form("education_form", clear_on_submit=True):
             school_name = st.text_input("Institution / University Name")
             degree_name = st.text_input("Degree / Major")
@@ -343,7 +343,7 @@ elif st.session_state.page == "builder":
                     st.rerun()
 
         # MODULE 4: PROJECTS OR INTERNSHIPS
-        st.subheader("🚀 Box 4: Projects & Internships")
+        st.subheader("🚀 Projects & Internships")
         with st.form("project_form", clear_on_submit=True):
             p_title = st.text_input("Project / Internship Title", placeholder="e.g., E-Commerce Architecture Backend")
             p_time = st.text_input("Timeline / Duration", placeholder="e.g., Jan 2024 - Mar 2024")
@@ -355,7 +355,7 @@ elif st.session_state.page == "builder":
                     st.rerun()
 
         # MODULE 5: SKILLS
-        st.subheader("🛠️ Box 5: Core Competencies & Skills")
+        st.subheader("🛠️ Core Competencies & Skills")
         with st.form("skills_form"):
             skills_input = st.text_area("Skills (Comma-separated matrix)", value=st.session_state.skills_info["skills"], placeholder="Python, Django, AWS Cloud Architecture")
             if st.form_submit_button("💾 Save Skills Entry"):
@@ -364,13 +364,13 @@ elif st.session_state.page == "builder":
 
     # MODULE 6: TEMPLATE CONTROL PANEL & VIEWPORT REAL-TIME DRAW WINDOWS
     with col2:
-        st.subheader("🎨 Box 6: Template Strategy Framework")
+        st.subheader("🎨 Template Strategy Framework")
         st.session_state.template = st.selectbox(
             "Select Layout Style Blueprint (Changes Document Structure)", 
             ["Classic Corporate", "Modern Minimalist", "Tech Startup", "Executive Elegance"]
         )
         
-        st.info(f"Active Naukri Style Blueprint Strategy: **{st.session_state.template}**")
+        st.info(f"Blueprint Strategy: **{st.session_state.template}**")
         st.markdown("---")
         st.subheader("👁️ Dynamic Profile Mockup Tracker")
         
